@@ -1,0 +1,118 @@
+# Nodo
+
+Un espacio personal para conectar ideas, notas y proyectos. Simple, minimalista y abierto a la comunidad.
+
+Nodo reúne proyectos con páginas por feature, bloques de texto, tablas de tareas y reportes que reflejan el avance del trabajo. Cada cuenta tiene su propio espacio privado.
+
+## Ejecutar en desarrollo
+
+Requiere **Node.js 22.16 o superior** y npm. Se recomienda una versión LTS actualizada. SQLite está incluido en Node.js; no necesitas instalar un servidor de base de datos.
+
+```powershell
+git clone https://github.com/mralexis99r/Nodo.git
+cd Nodo
+npm ci
+npm run dev
+```
+
+Abre [Nodo en tu equipo](http://127.0.0.1:5173). La API se ejecuta en el puerto 3001. Crea tu cuenta desde la pantalla de acceso. Puedes explorar un proyecto de ejemplo desde el inicio; sus datos son editables y pertenecen únicamente a tu cuenta.
+
+La configuración predeterminada funciona sin `.env`. Para modificarla:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`APP_ORIGIN` debe coincidir exactamente con el origen que abres en el navegador, incluyendo protocolo y puerto. Por defecto es `http://127.0.0.1:5173`.
+
+## Incluido en la versión 0.1
+
+- Registro, acceso y cierre de sesión con cuentas independientes.
+- Dashboard con proyectos activos, trabajo pendiente y completado, y páginas recientes.
+- Proyectos con nombre, descripción, icono, color y favoritos.
+- Páginas como pestañas: por ejemplo, Feature Login y Feature Payments.
+- Bloques de texto con negritas, cursivas, títulos, listas, color y resaltado.
+- Tablas de tareas con estado, prioridad, enlaces y paginación.
+- Reportes de avance calculados a partir de las tareas de todas las páginas.
+- Tarjetas visuales para enlaces de Figma, Jira, Azure DevOps y otros recursos.
+- Guardado automático, reintento y detección de conflictos entre ventanas.
+- Edición, duplicación y papelera recuperable para proyectos y páginas.
+- Duplicación, eliminación y cambio de orden de bloques.
+- Búsqueda, filtros, favoritos y paginación de proyectos.
+- Perfil con avatar de icono; temas claro, oscuro y del sistema.
+- Interfaz en español e inglés. El idioma no traduce el contenido escrito por el usuario.
+- Diseño adaptable, navegación por teclado y diálogos con control de foco.
+
+Las vistas previas de enlaces son tarjetas locales con proveedor, título y URL. **No existe todavía sincronización con las APIs de Figma, Jira o Azure DevOps**, ni extracción remota de miniaturas o estados. Puedes pegar el enlace de un WI y administrar su estado dentro de Nodo.
+
+## Persistencia y privacidad
+
+Los datos se guardan en `data/nodo.sqlite`, junto con los archivos auxiliares de SQLite. La carpeta `data/`, las dependencias y los archivos `.env` están excluidos de Git. El código publicado no contiene cuentas, contraseñas ni documentos personales.
+
+Las contraseñas usan scrypt con salt independiente. Las sesiones se guardan en el servidor mediante un hash del token y una cookie HttpOnly, SameSite Strict, con vigencia de siete días. Las consultas verifican al propietario del proyecto y de cada página. No hay espacios compartidos en esta versión.
+
+Para hacer una copia de respaldo inicial, detén Nodo y copia **toda la carpeta `data`**. Mantén los respaldos fuera del repositorio y con acceso restringido. La privacidad entre cuentas no sustituye la protección del equipo o del servidor que contiene la base de datos.
+
+## Compilar y alojar
+
+```powershell
+npm run build
+npm start
+```
+
+Sin configuración adicional, este comando sirve la aplicación compilada en `http://127.0.0.1:3001`. Para usarla desde ese origen, configura `APP_ORIGIN=http://127.0.0.1:3001` en `.env` antes de iniciar.
+
+Para alojarla en un servidor, configura:
+
+```dotenv
+NODE_ENV=production
+HOST=0.0.0.0
+PORT=3001
+APP_ORIGIN=https://nodo.example.com
+DATABASE_PATH=/var/lib/nodo/nodo.sqlite
+TRUST_PROXY=1
+```
+
+Usa HTTPS mediante un proxy inverso y un volumen persistente para la base de datos. En producción las cookies requieren HTTPS. `TRUST_PROXY=1` supone exactamente un proxy de confianza; ajusta ese valor a tu topología y evita que el puerto interno sea accesible directamente. Ejecuta una instancia de Node.js por base de datos SQLite. El alojamiento, dominio y operación pueden tener costos propios; el código de Nodo no requiere suscripción.
+
+## Comandos
+
+| Comando                | Función                                       |
+| ---------------------- | --------------------------------------------- |
+| `npm run dev`          | React y API con recarga automática            |
+| `npm test`             | Pruebas de API, privacidad, estados e idiomas |
+| `npm run build`        | Compilar la interfaz                          |
+| `npm start`            | Servir API e interfaz compilada               |
+| `npm run format`       | Formatear código y documentación              |
+| `npm run format:check` | Verificar el formato                          |
+
+## Stack y estructura
+
+ReactJS con Vite, TailwindCSS, Node.js con Express, SQLite y Tiptap para texto enriquecido. No utiliza servicios de pago para las funciones incluidas.
+
+```text
+src/
+  App.jsx            Acceso, dashboard, proyectos y perfil
+  Project.jsx        Proyecto, pestañas y resumen
+  editor/            Editor, tablas, enlaces y reportes
+  i18n.js            Textos del sistema en español e inglés
+  ui.jsx             Componentes compartidos e iconos
+  styles.css         Tokens y estilos de interfaz
+server/
+  app.js             API y control de acceso
+  db.js              Esquema y consultas de resumen
+  schema.js          Validación de entradas
+  sample.js          Proyecto de ejemplo opcional
+  tests/             Pruebas automatizadas
+docs/
+  architecture.md    Decisiones y modelo de datos
+  roadmap.md         Evolución propuesta
+```
+
+Los identificadores del código están en inglés; los archivos usan UTF-8 y los textos de interfaz están centralizados. Consulta [la arquitectura](docs/architecture.md) y [el roadmap](docs/roadmap.md) para continuar el proyecto.
+
+## Contribuir
+
+Consulta [CONTRIBUTING.md](CONTRIBUTING.md). Licencia [MIT](LICENSE).
+
+Built for a simpler personal workspace. The interface supports Spanish and English; your content stays in the language you write it.
