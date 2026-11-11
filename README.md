@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Abre [Nodo en tu equipo](http://127.0.0.1:5173). La API se ejecuta en el puerto 3001. Para crear y activar cuentas debes [configurar primero el envío de correo SMTP](docs/email-verification.md). El registro pide escribir el correo dos veces y confirmarlo con un código de seis dígitos. Puedes explorar un proyecto de ejemplo desde el inicio; sus datos son editables y pertenecen únicamente a tu cuenta.
+Abre [Nodo en tu equipo](http://127.0.0.1:5173). La API se ejecuta en el puerto 3001. Para crear y activar cuentas debes [configurar primero el proveedor de correo](docs/email-verification.md). Puedes utilizar la API de Brevo o un servidor SMTP compatible. El registro pide escribir el correo dos veces y confirmarlo con un código de seis dígitos. Puedes explorar un proyecto de ejemplo desde el inicio; sus datos son editables y pertenecen únicamente a tu cuenta.
 
 La aplicación puede arrancar sin `.env`, pero no activa cuentas sin correo verificado. Para configurar el correo y las demás opciones:
 
@@ -48,7 +48,7 @@ Las vistas previas de enlaces son tarjetas locales con proveedor, título y URL.
 
 ## Persistencia y privacidad
 
-Los datos se guardan en `data/nodo.sqlite`, junto con los archivos auxiliares de SQLite. La carpeta `data/`, las dependencias y los archivos `.env` están excluidos de Git. El código publicado no contiene cuentas, contraseñas ni documentos personales.
+En desarrollo, sin `DATABASE_URL`, los datos se guardan en `data/nodo.sqlite`. Cuando configuras `DATABASE_URL`, Nodo utiliza PostgreSQL. En producción PostgreSQL es obligatorio: la aplicación nunca utiliza un SQLite temporal como alternativa si falta la conexión. La carpeta `data/`, las dependencias y los archivos `.env` están excluidos de Git. El código publicado no contiene cuentas, contraseñas ni documentos personales.
 
 Las contraseñas usan scrypt con salt independiente. Las sesiones se guardan en el servidor mediante un hash del token y una cookie HttpOnly, SameSite Strict, con vigencia de siete días. Las consultas verifican al propietario del proyecto y de cada página. No hay espacios compartidos en esta versión.
 
@@ -70,11 +70,16 @@ NODE_ENV=production
 HOST=0.0.0.0
 PORT=3001
 APP_ORIGIN=https://nodo.example.com
-DATABASE_PATH=/var/lib/nodo/nodo.sqlite
+DATABASE_URL=postgresql://user:password@your-neon-host/nodo?sslmode=require
 TRUST_PROXY=1
+MAIL_PROVIDER=brevo
+BREVO_API_KEY=your-private-api-key
+MAIL_FROM_EMAIL=your-verified-sender@example.com
+MAIL_FROM_NAME=Nodo
+EMAIL_CODE_SECRET=your-random-secret-of-at-least-32-bytes
 ```
 
-Usa HTTPS mediante un proxy inverso y un volumen persistente para la base de datos. En producción las cookies requieren HTTPS. `TRUST_PROXY=1` supone exactamente un proxy de confianza; ajusta ese valor a tu topología y evita que el puerto interno sea accesible directamente. Ejecuta una instancia de Node.js por base de datos SQLite. El alojamiento, dominio y operación pueden tener costos propios; el código de Nodo no requiere suscripción.
+Usa HTTPS mediante un proxy inverso. En producción las cookies requieren HTTPS y la conexión remota a PostgreSQL valida el certificado TLS. `TRUST_PROXY=1` supone exactamente un proxy de confianza; ajusta ese valor a tu topología. Render proporciona `RENDER_EXTERNAL_URL`; Nodo lo utiliza como origen cuando no hay `APP_ORIGIN` explícito. Consulta [el despliegue gratuito con Render, Neon y Brevo](docs/cloud-deployment.md). Los planes gratuitos tienen cuotas y el código de Nodo no requiere suscripción.
 
 ## Comandos
 
@@ -89,7 +94,7 @@ Usa HTTPS mediante un proxy inverso y un volumen persistente para la base de dat
 
 ## Stack y estructura
 
-ReactJS con Vite, TailwindCSS, Node.js con Express, SQLite y Tiptap para texto enriquecido. No utiliza servicios de pago para las funciones incluidas.
+ReactJS con Vite, TailwindCSS, Node.js con Express, PostgreSQL para producción, SQLite para uso local y Tiptap para texto enriquecido. El despliegue propuesto utiliza planes gratuitos con cuotas.
 
 ```text
 src/

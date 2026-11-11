@@ -7,17 +7,21 @@ El registro requiere escribir dos veces el mismo correo y verificar su propiedad
 1. El servidor comprueba que ambos correos coincidan, normalizando mayúsculas y minúsculas.
 2. Guarda una cuenta pendiente con contraseña protegida mediante scrypt.
 3. Genera seis dígitos con `crypto.randomInt`, incluyendo ceros iniciales si corresponde.
-4. Envía el código por SMTP. Solo se guarda un HMAC SHA-256 ligado al usuario, con una clave del servidor que vive fuera de la base de datos.
+4. Envía el código por la API HTTPS de Brevo o por SMTP, según la configuración. Solo se guarda un HMAC SHA-256 ligado al usuario, con una clave del servidor que vive fuera de la base de datos.
 5. El código vence a los 10 minutos, aunque no se ingrese. El servidor comprueba la hora; modificar el reloj o el contador del navegador no amplía su validez.
 6. Después de 5 intentos incorrectos, ese código queda bloqueado.
 7. Al validarlo, el servidor marca el correo como verificado, elimina la huella activa del código y crea la sesión. El mismo código no se puede volver a usar.
 8. Si vence o se bloquea, el usuario puede solicitar otro. Cada envío reemplaza al anterior; hay 60 segundos de espera y un máximo de 5 envíos por cuenta cada hora. No se envían correos automáticamente en un ciclo al vencer.
 
-Las rutas de registro, acceso, verificación y reenvío comparten además el límite por IP de 30 solicitudes cada 15 minutos. Los intentos y los límites por cuenta se conservan en SQLite, incluyendo tras reiniciar el servidor.
+Las rutas de registro, acceso, verificación y reenvío comparten además el límite por IP de 30 solicitudes cada 15 minutos. Los intentos y los límites por cuenta se conservan en la base de datos, incluyendo tras reiniciar el servidor. PostgreSQL bloquea la fila del usuario durante la validación para impedir el uso simultáneo del mismo código.
 
 La contraseña necesaria para verificar o reenviar permanece únicamente en la memoria del formulario. No se guarda en `localStorage`, URLs ni cookies. Si se cierra o recarga la página, se debe volver a iniciar sesión con el correo y la contraseña para continuar la verificación.
 
 ## Configurar correo real
+
+Para Render gratuito, utiliza la API HTTPS de Brevo, ya que los puertos SMTP están bloqueados. Configura `MAIL_PROVIDER=brevo`, `BREVO_API_KEY`, `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` y `EMAIL_CODE_SECRET` en el servidor. El remitente debe estar verificado en Brevo y la clave debe ser de API, no una contraseña SMTP. Consulta [la configuración de despliegue](cloud-deployment.md).
+
+Para usar SMTP en tu equipo o en otro alojamiento, sigue estos pasos:
 
 Nodo todavía necesita que su operador elija y configure un proveedor de correo. El conector de Gmail del chat no funciona como servidor de correo para los visitantes de la aplicación.
 

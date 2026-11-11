@@ -1,5 +1,4 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
-import { transaction } from './db.js';
 
 export const verificationPolicy = {
   lifetimeMs: 10 * 60 * 1000,
@@ -14,8 +13,10 @@ export function createEmailVerification({ db, mailer, secret, clock = Date.now }
   function fail(code, status = 400, details = {}) {
     throw Object.assign(new Error(code), { status, details });
   }
-  function metadata(user) {
-    const record = db.prepare('SELECT * FROM email_verifications WHERE user_id = ?').get(user.id);
+  async function metadata(user) {
+    const record = await db
+      .prepare('SELECT * FROM email_verifications WHERE user_id = ?')
+      .get(user.id);
     return {
       email: user.email,
       expiresAt:
@@ -40,59 +41,73 @@ export function createEmailVerification({ db, mailer, secret, clock = Date.now }
   async function send(user) {
     assertConfigured();
     const date = clock();
-    const code = transaction(db, () => {
-      const current = db.prepare('SELECT email_verified_at FROM users WHERE id = ?').get(user.id);
+    const code = await db.transaction(async () => {
+      await db.lockUser(user.id);
+      const current = await db
+        .prepare('SELECT email_verified_at FROM users WHERE id = ?')
+        .get(user.id);
       if (!current || current.email_verified_at) fail('EMAIL_ALREADY_VERIFIED', 400);
-      const previous = db
+      const previous = await db
         .prepare('SELECT * FROM email_verifications WHERE user_id = ?')
         .get(user.id);
       if (previous && date < previous.last_sent_at + verificationPolicy.resendDelayMs)
-        fail('VERIFICATION_COOLDOWN', 429, { verification: metadata(user) });
+        fail('VERIFICATION_COOLDOWN', 429, { verification: await metadata(user) });
       const sameWindow = previous && date < previous.window_started_at + 3600000;
       if (sameWindow && previous.send_count >= verificationPolicy.maxSendsPerHour)
-        fail('VERIFICATION_SEND_LIMIT', 429, { verification: metadata(user) });
+        fail('VERIFICATION_SEND_LIMIT', 429, { verification: await metadata(user) });
       let freshCode;
       do {
         freshCode = String(randomInt(0, 1000000)).padStart(6, '0');
       } while (previous?.code_hash === digest(user.id, freshCode));
-      db.prepare(
-        `INSERT INTO email_verifications (user_id, code_hash, expires_at, attempts, last_sent_at, send_count, window_started_at)
+      await db
+        .prepare(
+          `INSERT INTO email_verifications (user_id, code_hash, expires_at, attempts, last_sent_at, send_count, window_started_at)
         VALUES (?, ?, ?, 0, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at,
           attempts = 0, last_sent_at = excluded.last_sent_at, send_count = excluded.send_count,
           window_started_at = excluded.window_started_at`,
-      ).run(
-        user.id,
-        digest(user.id, freshCode),
-        date + verificationPolicy.lifetimeMs,
-        date,
-        sameWindow ? previous.send_count + 1 : 1,
-        sameWindow ? previous.window_started_at : date,
-      );
+        )
+        .run(
+          user.id,
+          digest(user.id, freshCode),
+          date + verificationPolicy.lifetimeMs,
+          date,
+          sameWindow ? previous.send_count + 1 : 1,
+          sameWindow ? previous.window_started_at : date,
+        );
       return freshCode;
     });
     try {
       await mailer.send({ email: user.email, code, language: user.language });
     } catch {
-      db.prepare(
-        'UPDATE email_verifications SET code_hash = NULL, expires_at = 0 WHERE user_id = ? AND code_hash = ?',
-      ).run(user.id, digest(user.id, code));
-      fail('MAIL_DELIVERY_FAILED', 503, { verification: metadata(user) });
+      await db
+        .prepare(
+          'UPDATE email_verifications SET code_hash = NULL, expires_at = 0 WHERE user_id = ? AND code_hash = ?',
+        )
+        .run(user.id, digest(user.id, code));
+      fail('MAIL_DELIVERY_FAILED', 503, { verification: await metadata(user) });
     }
     // Do not return a code or its hash to the browser.
-    return metadata(user);
+    return await metadata(user);
   }
-  function verify(user, code) {
+  async function verify(user, code) {
     assertConfigured();
-    const result = transaction(db, () => {
-      const current = db.prepare('SELECT email_verified_at FROM users WHERE id = ?').get(user.id);
+    const result = await db.transaction(async () => {
+      await db.lockUser(user.id);
+      const current = await db
+        .prepare('SELECT email_verified_at FROM users WHERE id = ?')
+        .get(user.id);
       if (current?.email_verified_at) return 'EMAIL_ALREADY_VERIFIED';
-      const record = db.prepare('SELECT * FROM email_verifications WHERE user_id = ?').get(user.id);
+      const record = await db
+        .prepare('SELECT * FROM email_verifications WHERE user_id = ?')
+        .get(user.id);
       if (!record?.code_hash) return 'VERIFICATION_INVALID';
       if (record.attempts >= verificationPolicy.maxAttempts)
         return 'VERIFICATION_ATTEMPTS_EXCEEDED';
       if (clock() >= record.expires_at) {
-        db.prepare('UPDATE email_verifications SET expires_at = 0 WHERE user_id = ?').run(user.id);
+        await db
+          .prepare('UPDATE email_verifications SET expires_at = 0 WHERE user_id = ?')
+          .run(user.id);
         return 'VERIFICATION_EXPIRED';
       }
       const valid = timingSafeEqual(
@@ -100,23 +115,27 @@ export function createEmailVerification({ db, mailer, secret, clock = Date.now }
         Buffer.from(record.code_hash),
       );
       if (!valid) {
-        db.prepare('UPDATE email_verifications SET attempts = attempts + 1 WHERE user_id = ?').run(
-          user.id,
-        );
+        await db
+          .prepare('UPDATE email_verifications SET attempts = attempts + 1 WHERE user_id = ?')
+          .run(user.id);
         return record.attempts + 1 >= verificationPolicy.maxAttempts
           ? 'VERIFICATION_ATTEMPTS_EXCEEDED'
           : 'VERIFICATION_INVALID';
       }
-      db.prepare(
-        'UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL',
-      ).run(new Date(clock()).toISOString(), user.id);
-      db.prepare(
-        'UPDATE email_verifications SET code_hash = NULL, expires_at = 0 WHERE user_id = ?',
-      ).run(user.id);
-      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      await db
+        .prepare(
+          'UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL',
+        )
+        .run(new Date(clock()).toISOString(), user.id);
+      await db
+        .prepare(
+          'UPDATE email_verifications SET code_hash = NULL, expires_at = 0 WHERE user_id = ?',
+        )
+        .run(user.id);
+      await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
       return null;
     });
-    if (result) fail(result, 400, { verification: metadata(user) });
+    if (result) fail(result, 400, { verification: await metadata(user) });
   }
   return { assertConfigured, send, verify, metadata };
 }

@@ -233,7 +233,7 @@ export const messages = {
         'Tu cuenta está pendiente de verificación. Ingresa el código vigente o solicita uno nuevo.',
       EMAIL_ALREADY_VERIFIED: 'Este correo ya está verificado. Inicia sesión para continuar.',
       MAIL_NOT_CONFIGURED:
-        'El envío de correos aún no está configurado. El administrador debe configurar SMTP para activar cuentas.',
+        'El envío de correos aún no está configurado. El administrador debe configurar el proveedor de correo para activar cuentas.',
       MAIL_DELIVERY_FAILED:
         'No pudimos enviar el correo. Tu cuenta sigue pendiente; espera y solicita un código nuevo.',
       VERIFICATION_INVALID: 'El código no es válido. Revisa el correo más reciente.',
@@ -490,7 +490,7 @@ export const messages = {
         'Your account is pending verification. Enter the current code or request a new one.',
       EMAIL_ALREADY_VERIFIED: 'This email is already verified. Sign in to continue.',
       MAIL_NOT_CONFIGURED:
-        'Email delivery is not configured yet. An administrator must configure SMTP to activate accounts.',
+        'Email delivery is not configured yet. An administrator must configure an email provider to activate accounts.',
       MAIL_DELIVERY_FAILED:
         'We could not send the email. Your account is still pending; wait and request a new code.',
       VERIFICATION_INVALID: 'The code is invalid. Check the most recent email.',

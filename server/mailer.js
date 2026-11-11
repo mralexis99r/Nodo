@@ -10,7 +10,55 @@ export function verificationMessage({ code, language }) {
   };
 }
 
-export function createVerificationMailer(env = process.env) {
+export function createVerificationMailer(
+  env = process.env,
+  { fetch: sendRequest = globalThis.fetch } = {},
+) {
+  if (env.MAIL_PROVIDER === 'brevo' || (!env.MAIL_PROVIDER && env.BREVO_API_KEY)) {
+    const senderEmail = env.MAIL_FROM_EMAIL || env.MAIL_FROM;
+    const validSender = Boolean(
+      senderEmail && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(senderEmail),
+    );
+    const isConfigured = Boolean(env.BREVO_API_KEY && validSender);
+    return {
+      isConfigured,
+      async send({ email, code, language }) {
+        if (!isConfigured) throw new Error('MAIL_NOT_CONFIGURED');
+        const message = verificationMessage({ code, language });
+        let response;
+        try {
+          response = await sendRequest('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              'api-key': env.BREVO_API_KEY,
+            },
+            body: JSON.stringify({
+              sender: { email: senderEmail, name: env.MAIL_FROM_NAME || 'Nodo' },
+              to: [{ email }],
+              subject: message.subject,
+              textContent: message.text,
+            }),
+            signal: AbortSignal.timeout(15000),
+            redirect: 'error',
+          });
+        } catch {
+          throw new Error('MAIL_DELIVERY_FAILED');
+        }
+        if (!response.ok) throw new Error('MAIL_DELIVERY_FAILED');
+        const result = await response.json().catch(() => null);
+        if (!result?.messageId) throw new Error('MAIL_DELIVERY_FAILED');
+      },
+    };
+  }
+  if (env.MAIL_PROVIDER && env.MAIL_PROVIDER !== 'smtp')
+    return {
+      isConfigured: false,
+      async send() {
+        throw new Error('MAIL_NOT_CONFIGURED');
+      },
+    };
   const port = Number(env.SMTP_PORT || 587);
   const isConfigured = Boolean(
     env.SMTP_HOST &&

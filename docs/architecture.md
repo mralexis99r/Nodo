@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Un monolito pequeño y fácil de ejecutar: ReactJS presenta el espacio personal, Node.js valida y persiste las operaciones, y SQLite guarda los datos en un archivo. La interfaz y la API comparten origen para simplificar sesiones y despliegue.
+Un monolito pequeño y fácil de ejecutar: ReactJS presenta el espacio personal y Node.js valida y persiste las operaciones. SQLite se conserva para uso local; PostgreSQL es obligatorio en producción. La interfaz y la API comparten origen para simplificar sesiones y despliegue. Render sirve ambos desde la misma dirección y Neon conserva los datos fuera del sistema de archivos temporal del servidor.
 
 ## Modelo
 
@@ -99,11 +99,13 @@ Antes de cambiar de página, navegar o cerrar sesión, se intenta guardar. Si fa
 
 ## Límites conocidos
 
-Esta base no incluye colaboración, permisos compartidos, recuperación de contraseña, carga de archivos, importación de Notion, edición simultánea, OAuth ni sincronización de proveedores. La verificación de correo es obligatoria y requiere un proveedor SMTP configurado. Consulta [el flujo de verificación](email-verification.md).
+Esta base no incluye colaboración, permisos compartidos, recuperación de contraseña, carga de archivos, importación de Notion, edición simultánea, OAuth ni sincronización de proveedores. La verificación de correo es obligatoria y requiere un proveedor de correo configurado. Consulta [el flujo de verificación](email-verification.md).
 
 Los límites técnicos iniciales son 1 MB por solicitud, 100 bloques por página y 500 tareas por tabla. Las sesiones duran siete días y el límite de acceso es de 30 intentos por IP cada 15 minutos. El rate limiter usa memoria del proceso.
 
-SQLite y las consultas síncronas son adecuados para esta primera escala. Para crecer: PostgreSQL, pruebas de carga, un almacenamiento compartido para los límites de acceso y una estrategia operativa de respaldo. El esquema usa `PRAGMA user_version = 2`. La migración desde la versión 1 añade `users.email_verified_at` y la tabla `email_verifications`, elimina las sesiones previas y conserva usuarios y proyectos. Las cuentas existentes deben verificar su correo al volver a entrar. Las migraciones se ejecutan en una transacción al abrir la base de datos.
+La capa de almacenamiento utiliza consultas asíncronas con parámetros. En SQLite, las operaciones se serializan para impedir que una solicitud interfiera en la transacción de otra. En PostgreSQL se utiliza un pool pequeño y una conexión exclusiva por transacción. Las consultas remotas validan TLS; la verificación de correo toma un bloqueo de fila por usuario. El esquema PostgreSQL registra su versión en `schema_migrations` y la inicialización utiliza un bloqueo asesor para coordinar instancias.
+
+El esquema local usa `PRAGMA user_version = 2`. La migración desde la versión 1 añade `users.email_verified_at` y la tabla `email_verifications`, elimina las sesiones previas y conserva usuarios y proyectos. Las cuentas existentes deben verificar su correo al volver a entrar. El importador a PostgreSQL conserva el contenido, rechaza destinos con usuarios y no copia sesiones ni códigos pendientes.
 
 ## Referencias técnicas
 

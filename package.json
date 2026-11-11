@@ -12,6 +12,7 @@
     "dev:web": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "node server/index.js",
+    "db:import": "node scripts/import-sqlite.mjs",
     "test": "node --test server/tests/*.test.js",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -27,11 +28,13 @@
     "helmet": "^8.1.0",
     "lucide-react": "^0.468.0",
     "nodemailer": "^10.5.0",
+    "pg": "^8.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@tailwindcss/vite": "^4.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.2.0",

@@ -13,7 +13,8 @@ import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { openDatabase, summarize, transaction } from './db.js';
+import { summarize } from './db.js';
+import { createStorage } from './storage.js';
 import {
   credentialsSchema,
   registerSchema,
@@ -50,8 +51,10 @@ async function verifyPassword(password, stored) {
 
 export function createApp({
   databasePath = process.env.DATABASE_PATH || './data/nodo.sqlite',
+  databaseUrl = process.env.DATABASE_URL,
+  storage,
   production = process.env.NODE_ENV === 'production',
-  origin = process.env.APP_ORIGIN || 'http://127.0.0.1:5173',
+  origin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || 'http://127.0.0.1:5173',
   trustProxy = process.env.TRUST_PROXY || '0',
   authLimit = 30,
   mailer = createVerificationMailer(),
@@ -59,8 +62,15 @@ export function createApp({
   clock = Date.now,
 } = {}) {
   const app = express();
-  const db = openDatabase(databasePath);
-  app.locals.db = db;
+  const selected = storage || createStorage({ databaseUrl, databasePath, production });
+  const db = selected.store;
+  app.locals.db = selected.debugDb;
+  app.locals.store = db;
+  app.locals.ready = db.ready;
+  app.use(async (_req, _res, next) => {
+    await db.ready;
+    next();
+  });
   const emailVerification = createEmailVerification({
     db,
     mailer,
@@ -104,14 +114,12 @@ export function createApp({
     path: '/api',
     maxAge: sessionDuration,
   };
-  function session(res, userId) {
+  async function session(res, userId) {
     const token = randomBytes(32).toString('hex');
-    db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
-    db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(
-      hash(token),
-      userId,
-      Date.now() + sessionDuration,
-    );
+    await db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+    await db
+      .prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
+      .run(hash(token), userId, Date.now() + sessionDuration);
     res.cookie('nodo_session', token, cookieOptions);
   }
   const authLimiter = rateLimit({
@@ -123,27 +131,29 @@ export function createApp({
   });
   app.post('/api/auth/register', authLimiter, async (req, res) => {
     const input = registerSchema.parse(req.body);
-    if (db.prepare('SELECT id FROM users WHERE email = ?').get(input.email))
+    if (await db.prepare('SELECT id FROM users WHERE email = ?').get(input.email))
       return res.status(409).json({ error: 'EMAIL_EXISTS' });
     emailVerification.assertConfigured();
     const id = randomUUID();
     const password = await passwordHash(input.password);
     try {
-      db.prepare(
-        'INSERT INTO users (id, email, password_hash, name, language, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, input.email, password, input.name, input.language, now());
+      await db
+        .prepare(
+          'INSERT INTO users (id, email, password_hash, name, language, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(id, input.email, password, input.name, input.language, now());
     } catch (error) {
-      if (String(error.message).includes('UNIQUE'))
+      if (error.code === '23505' || String(error.message).includes('UNIQUE'))
         return res.status(409).json({ error: 'EMAIL_EXISTS' });
       throw error;
     }
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const verification = await emailVerification.send(user);
     res.status(202).json({ verificationRequired: true, verification });
   });
   app.post('/api/auth/login', authLimiter, async (req, res) => {
     const input = credentialsSchema.parse(req.body);
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(input.email);
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(input.email);
     // Perform the expensive hash even for unknown accounts.
     const valid = await verifyPassword(
       input.password,
@@ -151,17 +161,20 @@ export function createApp({
     );
     if (!user || !valid) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
     if (!user.email_verified_at)
-      return res
-        .status(403)
-        .json({ error: 'EMAIL_NOT_VERIFIED', verification: emailVerification.metadata(user) });
+      return res.status(403).json({
+        error: 'EMAIL_NOT_VERIFIED',
+        verification: await emailVerification.metadata(user),
+      });
     if (req.cookies.nodo_session)
-      db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash(req.cookies.nodo_session));
-    session(res, user.id);
+      await db
+        .prepare('DELETE FROM sessions WHERE token_hash = ?')
+        .run(hash(req.cookies.nodo_session));
+    await session(res, user.id);
     res.json(publicUser(user));
   });
   async function pendingUser(body) {
     const input = credentialsSchema.parse(body);
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(input.email);
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(input.email);
     const valid = await verifyPassword(
       input.password,
       user?.password_hash || `${'0'.repeat(32)}:${'0'.repeat(128)}`,
@@ -174,10 +187,12 @@ export function createApp({
   app.post('/api/auth/verify-email', authLimiter, async (req, res) => {
     const input = verificationSchema.parse(req.body);
     const user = await pendingUser(input);
-    emailVerification.verify(user, input.code);
+    await emailVerification.verify(user, input.code);
     if (req.cookies.nodo_session)
-      db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash(req.cookies.nodo_session));
-    session(res, user.id);
+      await db
+        .prepare('DELETE FROM sessions WHERE token_hash = ?')
+        .run(hash(req.cookies.nodo_session));
+    await session(res, user.id);
     res.json(publicUser(user));
   });
   app.post('/api/auth/resend-verification', authLimiter, async (req, res) => {
@@ -185,95 +200,105 @@ export function createApp({
     const verification = await emailVerification.send(user);
     res.json({ verificationRequired: true, verification });
   });
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
     if (req.cookies.nodo_session)
-      db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash(req.cookies.nodo_session));
+      await db
+        .prepare('DELETE FROM sessions WHERE token_hash = ?')
+        .run(hash(req.cookies.nodo_session));
     res.clearCookie('nodo_session', { ...cookieOptions, maxAge: undefined });
     res.status(204).end();
   });
-  app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
-  app.use('/api', (req, res, next) => {
+  app.get('/api/health', async (_req, res) => {
+    await db.ping();
+    res.json({ status: 'ok' });
+  });
+  app.use('/api', async (req, res, next) => {
     const token = req.cookies.nodo_session;
     const user =
       token &&
-      db
+      (await db
         .prepare(
           'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.email_verified_at IS NOT NULL',
         )
-        .get(hash(token), Date.now());
+        .get(hash(token), Date.now()));
     if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED' });
     req.user = user;
     next();
   });
   app.get('/api/me', (req, res) => res.json(publicUser(req.user)));
-  app.patch('/api/me', (req, res) => {
+  app.patch('/api/me', async (req, res) => {
     const input = profileSchema.parse(req.body);
-    db.prepare('UPDATE users SET name = ?, avatar = ?, language = ?, theme = ? WHERE id = ?').run(
-      input.name,
-      input.avatar,
-      input.language,
-      input.theme,
-      req.user.id,
-    );
-    res.json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)));
+    await db
+      .prepare('UPDATE users SET name = ?, avatar = ?, language = ?, theme = ? WHERE id = ?')
+      .run(input.name, input.avatar, input.language, input.theme, req.user.id);
+    res.json(publicUser(await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id)));
   });
 
-  const getProject = (id, userId, includeTrash = false) =>
-    db
+  const getProject = async (id, userId, includeTrash = false) =>
+    await db
       .prepare(
         `SELECT * FROM projects WHERE id = ? AND user_id = ? ${includeTrash ? '' : 'AND deleted_at IS NULL'}`,
       )
       .get(id, userId);
-  const getPages = (projectId) =>
-    db
-      .prepare(
-        'SELECT * FROM pages WHERE project_id = ? AND deleted_at IS NULL ORDER BY position, created_at',
-      )
-      .all(projectId)
-      .map(parsePage);
-  const getPage = (id, userId, includeTrash = false) =>
-    db
+  const getPages = async (projectId) =>
+    (
+      await db
+        .prepare(
+          'SELECT * FROM pages WHERE project_id = ? AND deleted_at IS NULL ORDER BY position, created_at',
+        )
+        .all(projectId)
+    ).map(parsePage);
+  const getPage = async (id, userId, includeTrash = false) =>
+    await db
       .prepare(
         `SELECT p.* FROM pages p JOIN projects j ON j.id = p.project_id WHERE p.id = ? AND j.user_id = ? ${includeTrash ? '' : 'AND p.deleted_at IS NULL AND j.deleted_at IS NULL'}`,
       )
       .get(id, userId);
-  const touch = (id) =>
-    db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
-  function insertPage(projectId, input, position = 0) {
+  const touch = async (id) =>
+    await db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
+  async function insertPage(projectId, input, position = 0) {
     const id = randomUUID(),
       date = now();
-    db.prepare(
-      'INSERT INTO pages (id, project_id, title, icon, status, blocks, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(
-      id,
-      projectId,
-      input.title,
-      input.icon,
-      input.status,
-      JSON.stringify(input.blocks),
-      position,
-      date,
-      date,
-    );
-    return parsePage(db.prepare('SELECT * FROM pages WHERE id = ?').get(id));
+    await db
+      .prepare(
+        'INSERT INTO pages (id, project_id, title, icon, status, blocks, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        id,
+        projectId,
+        input.title,
+        input.icon,
+        input.status,
+        JSON.stringify(input.blocks),
+        position,
+        date,
+        date,
+      );
+    return parsePage(await db.prepare('SELECT * FROM pages WHERE id = ?').get(id));
   }
-  function insertProject(userId, input) {
+  async function insertProject(userId, input) {
     const id = randomUUID(),
       date = now();
-    db.prepare(
-      'INSERT INTO projects (id, user_id, title, description, icon, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(id, userId, input.title, input.description, input.icon, input.color, date, date);
+    await db
+      .prepare(
+        'INSERT INTO projects (id, user_id, title, description, icon, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(id, userId, input.title, input.description, input.icon, input.color, date, date);
     return id;
   }
-  app.get('/api/dashboard', (req, res) => {
-    const projects = db
+  app.get('/api/dashboard', async (req, res) => {
+    const records = await db
       .prepare(
         'SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC',
       )
-      .all(req.user.id)
-      .map((p) => ({ ...p, summary: summarize(getPages(p.id)) }));
-    const allPages = projects.flatMap((project) =>
-      getPages(project.id).map((page) => ({
+      .all(req.user.id);
+    const pagesByProject = await Promise.all(records.map((project) => getPages(project.id)));
+    const projects = records.map((project, index) => ({
+      ...project,
+      summary: summarize(pagesByProject[index]),
+    }));
+    const allPages = records.flatMap((project, index) =>
+      pagesByProject[index].map((page) => ({
         ...page,
         projectTitle: project.title,
         projectColor: project.color,
@@ -292,7 +317,7 @@ export function createApp({
       pages: allPages.sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5),
     });
   });
-  app.get('/api/projects', (req, res) => {
+  app.get('/api/projects', async (req, res) => {
     const query = z
       .object({
         page: z.coerce.number().int().min(1).default(1),
@@ -303,18 +328,23 @@ export function createApp({
       })
       .parse(req.query);
     const needle = query.q.toLocaleLowerCase();
-    const filtered = db
-      .prepare(
-        'SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL ORDER BY favorite DESC, updated_at DESC',
-      )
-      .all(req.user.id)
-      .filter(
-        (p) =>
-          (!query.q || `${p.title} ${p.description}`.toLocaleLowerCase().includes(needle)) &&
-          (query.favorite !== 'true' || p.favorite),
-      )
-      .map((p) => ({ ...p, summary: summarize(getPages(p.id)) }))
-      .filter((p) => query.status === 'all' || p.summary.status === query.status);
+    const matching = (
+      await db
+        .prepare(
+          'SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL ORDER BY favorite DESC, updated_at DESC',
+        )
+        .all(req.user.id)
+    ).filter(
+      (p) =>
+        (!query.q || `${p.title} ${p.description}`.toLocaleLowerCase().includes(needle)) &&
+        (query.favorite !== 'true' || p.favorite),
+    );
+    const summaries = await Promise.all(
+      matching.map(async (p) => ({ ...p, summary: summarize(await getPages(p.id)) })),
+    );
+    const filtered = summaries.filter(
+      (p) => query.status === 'all' || p.summary.status === query.status,
+    );
     res.json({
       items: filtered.slice((query.page - 1) * query.limit, query.page * query.limit),
       total: filtered.length,
@@ -322,84 +352,92 @@ export function createApp({
       pages: Math.max(1, Math.ceil(filtered.length / query.limit)),
     });
   });
-  app.post('/api/projects', (req, res) => {
+  app.post('/api/projects', async (req, res) => {
     const input = projectSchema.parse(req.body);
-    const id = insertProject(req.user.id, input);
-    res.status(201).json({ ...getProject(id, req.user.id), pages: [], summary: summarize([]) });
+    const id = await insertProject(req.user.id, input);
+    res
+      .status(201)
+      .json({ ...(await getProject(id, req.user.id)), pages: [], summary: summarize([]) });
   });
-  app.post('/api/projects/sample', (req, res) => {
+  app.post('/api/projects/sample', async (req, res) => {
     const sample = sampleProject(req.user.language);
-    const id = transaction(db, () => {
-      const projectId = insertProject(req.user.id, projectSchema.parse(sample));
-      sample.pages.forEach((page, index) => insertPage(projectId, pageSchema.parse(page), index));
+    const id = await db.transaction(async () => {
+      const projectId = await insertProject(req.user.id, projectSchema.parse(sample));
+      for (const [index, page] of sample.pages.entries())
+        await insertPage(projectId, pageSchema.parse(page), index);
       return projectId;
     });
     res.status(201).json({ id });
   });
-  app.get('/api/trash', (req, res) => {
-    const projects = db
+  app.get('/api/trash', async (req, res) => {
+    const projects = await db
       .prepare(
         'SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC',
       )
       .all(req.user.id);
-    const pages = db
-      .prepare(
-        'SELECT p.*, j.title AS projectTitle FROM pages p JOIN projects j ON j.id = p.project_id WHERE j.user_id = ? AND j.deleted_at IS NULL AND p.deleted_at IS NOT NULL ORDER BY p.deleted_at DESC',
-      )
-      .all(req.user.id)
-      .map(parsePage);
+    const pages = (
+      await db
+        .prepare(
+          'SELECT p.*, j.title AS "projectTitle" FROM pages p JOIN projects j ON j.id = p.project_id WHERE j.user_id = ? AND j.deleted_at IS NULL AND p.deleted_at IS NOT NULL ORDER BY p.deleted_at DESC',
+        )
+        .all(req.user.id)
+    ).map(parsePage);
     res.json({ projects, pages });
   });
-  app.get('/api/projects/:id', (req, res) => {
-    const project = getProject(req.params.id, req.user.id);
+  app.get('/api/projects/:id', async (req, res) => {
+    const project = await getProject(req.params.id, req.user.id);
     if (!project) return res.status(404).json({ error: 'NOT_FOUND' });
-    const pages = getPages(project.id);
+    const pages = await getPages(project.id);
     res.json({ ...project, pages, summary: summarize(pages) });
   });
-  app.patch('/api/projects/:id', (req, res) => {
-    const project = getProject(req.params.id, req.user.id);
+  app.patch('/api/projects/:id', async (req, res) => {
+    const project = await getProject(req.params.id, req.user.id);
     if (!project) return res.status(404).json({ error: 'NOT_FOUND' });
     const input = projectSchema
       .extend({ favorite: z.boolean() })
       .parse({ ...project, favorite: Boolean(project.favorite), ...req.body });
-    db.prepare(
-      'UPDATE projects SET title = ?, description = ?, icon = ?, color = ?, favorite = ?, updated_at = ? WHERE id = ?',
-    ).run(
-      input.title,
-      input.description,
-      input.icon,
-      input.color,
-      Number(input.favorite),
-      now(),
-      project.id,
-    );
-    res.json({ ...getProject(project.id, req.user.id), summary: summarize(getPages(project.id)) });
+    await db
+      .prepare(
+        'UPDATE projects SET title = ?, description = ?, icon = ?, color = ?, favorite = ?, updated_at = ? WHERE id = ?',
+      )
+      .run(
+        input.title,
+        input.description,
+        input.icon,
+        input.color,
+        Number(input.favorite),
+        now(),
+        project.id,
+      );
+    res.json({
+      ...(await getProject(project.id, req.user.id)),
+      summary: summarize(await getPages(project.id)),
+    });
   });
-  app.delete('/api/projects/:id', (req, res) => {
-    if (!getProject(req.params.id, req.user.id))
+  app.delete('/api/projects/:id', async (req, res) => {
+    if (!(await getProject(req.params.id, req.user.id)))
       return res.status(404).json({ error: 'NOT_FOUND' });
-    db.prepare('UPDATE projects SET deleted_at = ? WHERE id = ?').run(now(), req.params.id);
+    await db.prepare('UPDATE projects SET deleted_at = ? WHERE id = ?').run(now(), req.params.id);
     res.status(204).end();
   });
-  app.post('/api/projects/:id/restore', (req, res) => {
-    if (!getProject(req.params.id, req.user.id, true))
+  app.post('/api/projects/:id/restore', async (req, res) => {
+    if (!(await getProject(req.params.id, req.user.id, true)))
       return res.status(404).json({ error: 'NOT_FOUND' });
-    db.prepare('UPDATE projects SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(
-      now(),
-      req.params.id,
-    );
+    await db
+      .prepare('UPDATE projects SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+      .run(now(), req.params.id);
     res.status(204).end();
   });
-  app.post('/api/projects/:id/duplicate', (req, res) => {
-    const project = getProject(req.params.id, req.user.id);
+  app.post('/api/projects/:id/duplicate', async (req, res) => {
+    const project = await getProject(req.params.id, req.user.id);
     if (!project) return res.status(404).json({ error: 'NOT_FOUND' });
-    const id = transaction(db, () => {
-      const projectId = insertProject(req.user.id, {
+    const id = await db.transaction(async () => {
+      const projectId = await insertProject(req.user.id, {
         ...project,
         title: `${project.title.slice(0, 110)} (${req.user.language === 'es' ? 'copia' : 'copy'})`,
       });
-      getPages(project.id).forEach((page, index) =>
-        insertPage(
+      for (const [index, page] of (await getPages(project.id)).entries()) {
+        await insertPage(
           projectId,
           {
             ...page,
@@ -412,28 +450,32 @@ export function createApp({
             })),
           },
           index,
-        ),
-      );
+        );
+      }
       return projectId;
     });
     res.status(201).json({ id });
   });
-  app.post('/api/projects/:id/pages', (req, res) => {
-    if (!getProject(req.params.id, req.user.id))
+  app.post('/api/projects/:id/pages', async (req, res) => {
+    if (!(await getProject(req.params.id, req.user.id)))
       return res.status(404).json({ error: 'NOT_FOUND' });
     const input = pageSchema.parse(req.body);
-    const position = db
-      .prepare('SELECT COALESCE(MAX(position), -1) + 1 AS position FROM pages WHERE project_id = ?')
-      .get(req.params.id).position;
-    const page = insertPage(req.params.id, input, position);
-    touch(req.params.id);
+    const position = (
+      await db
+        .prepare(
+          'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM pages WHERE project_id = ?',
+        )
+        .get(req.params.id)
+    ).position;
+    const page = await insertPage(req.params.id, input, position);
+    await touch(req.params.id);
     res.status(201).json(page);
   });
-  app.put('/api/pages/:id', (req, res) => {
-    const page = getPage(req.params.id, req.user.id);
+  app.put('/api/pages/:id', async (req, res) => {
+    const page = await getPage(req.params.id, req.user.id);
     if (!page) return res.status(404).json({ error: 'NOT_FOUND' });
     const input = pageSchema.extend({ version: z.number().int().positive() }).parse(req.body);
-    const result = db
+    const result = await db
       .prepare(
         'UPDATE pages SET title = ?, icon = ?, status = ?, blocks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?',
       )
@@ -447,34 +489,40 @@ export function createApp({
         input.version,
       );
     if (!result.changes) return res.status(409).json({ error: 'VERSION_CONFLICT' });
-    touch(page.project_id);
-    res.json(parsePage(getPage(page.id, req.user.id)));
+    await touch(page.project_id);
+    res.json(parsePage(await getPage(page.id, req.user.id)));
   });
-  app.delete('/api/pages/:id', (req, res) => {
-    const page = getPage(req.params.id, req.user.id);
+  app.delete('/api/pages/:id', async (req, res) => {
+    const page = await getPage(req.params.id, req.user.id);
     if (!page) return res.status(404).json({ error: 'NOT_FOUND' });
-    db.prepare('UPDATE pages SET deleted_at = ? WHERE id = ?').run(now(), page.id);
-    touch(page.project_id);
+    await db.prepare('UPDATE pages SET deleted_at = ? WHERE id = ?').run(now(), page.id);
+    await touch(page.project_id);
     res.status(204).end();
   });
-  app.post('/api/pages/:id/restore', (req, res) => {
-    const page = getPage(req.params.id, req.user.id, true);
-    if (!page || !getProject(page.project_id, req.user.id))
+  app.post('/api/pages/:id/restore', async (req, res) => {
+    const page = await getPage(req.params.id, req.user.id, true);
+    if (!page || !(await getProject(page.project_id, req.user.id)))
       return res.status(404).json({ error: 'NOT_FOUND' });
-    db.prepare(
-      'UPDATE pages SET deleted_at = NULL, version = version + 1, updated_at = ? WHERE id = ?',
-    ).run(now(), page.id);
-    touch(page.project_id);
+    await db
+      .prepare(
+        'UPDATE pages SET deleted_at = NULL, version = version + 1, updated_at = ? WHERE id = ?',
+      )
+      .run(now(), page.id);
+    await touch(page.project_id);
     res.status(204).end();
   });
-  app.post('/api/pages/:id/duplicate', (req, res) => {
-    const stored = getPage(req.params.id, req.user.id);
+  app.post('/api/pages/:id/duplicate', async (req, res) => {
+    const stored = await getPage(req.params.id, req.user.id);
     if (!stored) return res.status(404).json({ error: 'NOT_FOUND' });
     const page = parsePage(stored);
-    const position = db
-      .prepare('SELECT COALESCE(MAX(position), -1) + 1 AS position FROM pages WHERE project_id = ?')
-      .get(page.project_id).position;
-    const copy = insertPage(
+    const position = (
+      await db
+        .prepare(
+          'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM pages WHERE project_id = ?',
+        )
+        .get(page.project_id)
+    ).position;
+    const copy = await insertPage(
       page.project_id,
       {
         ...page,
@@ -489,7 +537,7 @@ export function createApp({
       },
       position,
     );
-    touch(page.project_id);
+    await touch(page.project_id);
     res.status(201).json(copy);
   });
   app.use('/api', (_req, res) => res.status(404).json({ error: 'NOT_FOUND' }));
@@ -525,7 +573,7 @@ export function createApp({
       return res.status(413).json({ error: 'CONTENT_TOO_LARGE' });
     if (error instanceof SyntaxError && error.status === 400)
       return res.status(400).json({ error: 'INVALID_INPUT' });
-    console.error('Request failed:', error.message);
+    console.error('Request failed:', error.code || error.name);
     res.status(500).json({ error: 'SERVER_ERROR' });
   });
   return app;
