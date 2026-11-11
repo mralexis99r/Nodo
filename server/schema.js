@@ -137,7 +137,17 @@ export const credentialsSchema = z.object({
     .transform((s) => s.toLowerCase()),
   password: z.string().min(10).max(128),
 });
-export const registerSchema = credentialsSchema.extend({
-  name: z.string().trim().min(1).max(80),
-  language: z.enum(['es', 'en']).default('es'),
-});
+export const registerSchema = credentialsSchema
+  .extend({
+    name: z.string().trim().min(1).max(80),
+    language: z.enum(['es', 'en']).default('es'),
+    emailConfirmation: z
+      .email()
+      .max(254)
+      .transform((value) => value.toLowerCase()),
+  })
+  .refine((value) => value.email === value.emailConfirmation, {
+    message: 'EMAIL_MISMATCH',
+    path: ['emailConfirmation'],
+  });
+export const verificationSchema = credentialsSchema.extend({ code: z.string().regex(/^\d{6}$/) });

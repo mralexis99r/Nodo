@@ -1,5 +1,19 @@
 export const messages = {
   es: {
+    emailConfirmation: 'Confirmar correo electrónico',
+    verifyEmailLabel: 'VERIFICACIÓN DE CORREO',
+    verifyEmailTitle: 'Confirma que eres tú',
+    verifyEmailBody: 'Ingresa el código enviado a {email} para activar tu cuenta.',
+    verificationCode: 'Código de 6 dígitos',
+    verifyEmailAction: 'Verificar y entrar',
+    verificationSent: 'Enviamos un código nuevo. Revisa también la carpeta de correo no deseado.',
+    verificationExpires: 'El código vence en {minutes}:{seconds}. Solo puede utilizarse una vez.',
+    verificationRequestNew: 'Solicita un código nuevo para continuar.',
+    verificationResend: 'Enviar un código nuevo',
+    verificationResendWait: 'Podrás reenviar en {seconds} s',
+    verificationHelp:
+      'Cada código nuevo invalida el anterior. Tu cuenta permanece bloqueada hasta verificar el correo.',
+    backToLogin: 'Volver al inicio de sesión',
     icons: {
       layers: 'Capas',
       folder: 'Carpeta',
@@ -203,7 +217,7 @@ export const messages = {
     noAccount: '¿Primera vez en Nodo?',
     haveAccount: '¿Ya tienes una cuenta?',
     welcomeBack: 'Bienvenido a Nodo',
-    registerAction: 'Crear mi espacio',
+    registerAction: 'Enviar código de verificación',
     secureNote: 'Tus proyectos son privados por defecto.',
     loading: 'Cargando tu espacio...',
     back: 'Volver',
@@ -214,6 +228,21 @@ export const messages = {
     confirmLogout: 'Cerrar sesión',
     linkRequired: 'Pega el enlace de Jira, Azure DevOps, Figma u otro recurso.',
     errors: {
+      EMAIL_MISMATCH: 'Los dos correos electrónicos deben coincidir.',
+      EMAIL_NOT_VERIFIED:
+        'Tu cuenta está pendiente de verificación. Ingresa el código vigente o solicita uno nuevo.',
+      EMAIL_ALREADY_VERIFIED: 'Este correo ya está verificado. Inicia sesión para continuar.',
+      MAIL_NOT_CONFIGURED:
+        'El envío de correos aún no está configurado. El administrador debe configurar SMTP para activar cuentas.',
+      MAIL_DELIVERY_FAILED:
+        'No pudimos enviar el correo. Tu cuenta sigue pendiente; espera y solicita un código nuevo.',
+      VERIFICATION_INVALID: 'El código no es válido. Revisa el correo más reciente.',
+      VERIFICATION_EXPIRED: 'El código ya venció. Solicita un código nuevo.',
+      VERIFICATION_ATTEMPTS_EXCEEDED:
+        'Este código quedó bloqueado después de 5 intentos. Solicita uno nuevo.',
+      VERIFICATION_COOLDOWN: 'Espera al menos 60 segundos entre envíos.',
+      VERIFICATION_SEND_LIMIT:
+        'Alcanzaste el límite de 5 correos por hora. Espera antes de solicitar otro.',
       NETWORK_ERROR: 'No pudimos conectar con el servidor.',
       INVALID_CREDENTIALS: 'El correo o la contraseña no son correctos.',
       EMAIL_EXISTS: 'Ya existe una cuenta con este correo.',
@@ -230,6 +259,20 @@ export const messages = {
     },
   },
   en: {
+    emailConfirmation: 'Confirm email address',
+    verifyEmailLabel: 'EMAIL VERIFICATION',
+    verifyEmailTitle: 'Confirm it is you',
+    verifyEmailBody: 'Enter the code sent to {email} to activate your account.',
+    verificationCode: '6-digit code',
+    verifyEmailAction: 'Verify and sign in',
+    verificationSent: 'We sent a new code. Please also check your spam folder.',
+    verificationExpires: 'The code expires in {minutes}:{seconds}. It can only be used once.',
+    verificationRequestNew: 'Request a new code to continue.',
+    verificationResend: 'Send a new code',
+    verificationResendWait: 'You can resend in {seconds} s',
+    verificationHelp:
+      'Each new code invalidates the previous one. Your account remains locked until your email is verified.',
+    backToLogin: 'Back to sign in',
     icons: {
       layers: 'Layers',
       folder: 'Folder',
@@ -431,7 +474,7 @@ export const messages = {
     noAccount: 'New to Nodo?',
     haveAccount: 'Already have an account?',
     welcomeBack: 'Welcome to Nodo',
-    registerAction: 'Create my workspace',
+    registerAction: 'Send verification code',
     secureNote: 'Your projects are private by default.',
     loading: 'Loading your workspace...',
     back: 'Back',
@@ -442,6 +485,20 @@ export const messages = {
     confirmLogout: 'Sign out',
     linkRequired: 'Paste a Jira, Azure DevOps, Figma, or another resource link.',
     errors: {
+      EMAIL_MISMATCH: 'Both email addresses must match.',
+      EMAIL_NOT_VERIFIED:
+        'Your account is pending verification. Enter the current code or request a new one.',
+      EMAIL_ALREADY_VERIFIED: 'This email is already verified. Sign in to continue.',
+      MAIL_NOT_CONFIGURED:
+        'Email delivery is not configured yet. An administrator must configure SMTP to activate accounts.',
+      MAIL_DELIVERY_FAILED:
+        'We could not send the email. Your account is still pending; wait and request a new code.',
+      VERIFICATION_INVALID: 'The code is invalid. Check the most recent email.',
+      VERIFICATION_EXPIRED: 'The code has expired. Request a new one.',
+      VERIFICATION_ATTEMPTS_EXCEEDED: 'This code was locked after 5 attempts. Request a new one.',
+      VERIFICATION_COOLDOWN: 'Wait at least 60 seconds between deliveries.',
+      VERIFICATION_SEND_LIMIT:
+        'You reached the limit of 5 emails per hour. Wait before requesting another code.',
       NETWORK_ERROR: 'We could not connect to the server.',
       INVALID_CREDENTIALS: 'The email or password is incorrect.',
       EMAIL_EXISTS: 'An account with this email already exists.',

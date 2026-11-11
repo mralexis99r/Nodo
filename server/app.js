@@ -20,8 +20,11 @@ import {
   profileSchema,
   projectSchema,
   pageSchema,
+  verificationSchema,
 } from './schema.js';
 import { sampleProject } from './sample.js';
+import { createVerificationMailer } from './mailer.js';
+import { createEmailVerification } from './email-verification.js';
 
 const scrypt = promisify(scryptCallback);
 const now = () => new Date().toISOString();
@@ -51,10 +54,19 @@ export function createApp({
   origin = process.env.APP_ORIGIN || 'http://127.0.0.1:5173',
   trustProxy = process.env.TRUST_PROXY || '0',
   authLimit = 30,
+  mailer = createVerificationMailer(),
+  verificationSecret = process.env.EMAIL_CODE_SECRET,
+  clock = Date.now,
 } = {}) {
   const app = express();
   const db = openDatabase(databasePath);
   app.locals.db = db;
+  const emailVerification = createEmailVerification({
+    db,
+    mailer,
+    secret: verificationSecret,
+    clock,
+  });
   app.disable('x-powered-by');
   if (trustProxy !== '0') app.set('trust proxy', Number(trustProxy));
   app.use(
@@ -113,6 +125,7 @@ export function createApp({
     const input = registerSchema.parse(req.body);
     if (db.prepare('SELECT id FROM users WHERE email = ?').get(input.email))
       return res.status(409).json({ error: 'EMAIL_EXISTS' });
+    emailVerification.assertConfigured();
     const id = randomUUID();
     const password = await passwordHash(input.password);
     try {
@@ -124,8 +137,9 @@ export function createApp({
         return res.status(409).json({ error: 'EMAIL_EXISTS' });
       throw error;
     }
-    session(res, id);
-    res.status(201).json(publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)));
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    const verification = await emailVerification.send(user);
+    res.status(202).json({ verificationRequired: true, verification });
   });
   app.post('/api/auth/login', authLimiter, async (req, res) => {
     const input = credentialsSchema.parse(req.body);
@@ -136,10 +150,40 @@ export function createApp({
       user?.password_hash || `${'0'.repeat(32)}:${'0'.repeat(128)}`,
     );
     if (!user || !valid) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+    if (!user.email_verified_at)
+      return res
+        .status(403)
+        .json({ error: 'EMAIL_NOT_VERIFIED', verification: emailVerification.metadata(user) });
     if (req.cookies.nodo_session)
       db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash(req.cookies.nodo_session));
     session(res, user.id);
     res.json(publicUser(user));
+  });
+  async function pendingUser(body) {
+    const input = credentialsSchema.parse(body);
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(input.email);
+    const valid = await verifyPassword(
+      input.password,
+      user?.password_hash || `${'0'.repeat(32)}:${'0'.repeat(128)}`,
+    );
+    if (!user || !valid) throw Object.assign(new Error('INVALID_CREDENTIALS'), { status: 401 });
+    if (user.email_verified_at)
+      throw Object.assign(new Error('EMAIL_ALREADY_VERIFIED'), { status: 400 });
+    return user;
+  }
+  app.post('/api/auth/verify-email', authLimiter, async (req, res) => {
+    const input = verificationSchema.parse(req.body);
+    const user = await pendingUser(input);
+    emailVerification.verify(user, input.code);
+    if (req.cookies.nodo_session)
+      db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash(req.cookies.nodo_session));
+    session(res, user.id);
+    res.json(publicUser(user));
+  });
+  app.post('/api/auth/resend-verification', authLimiter, async (req, res) => {
+    const user = await pendingUser(req.body);
+    const verification = await emailVerification.send(user);
+    res.json({ verificationRequired: true, verification });
   });
   app.post('/api/auth/logout', (req, res) => {
     if (req.cookies.nodo_session)
@@ -154,7 +198,7 @@ export function createApp({
       token &&
       db
         .prepare(
-          'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ?',
+          'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.email_verified_at IS NOT NULL',
         )
         .get(hash(token), Date.now());
     if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED' });
@@ -455,9 +499,26 @@ export function createApp({
     app.get('/{*path}', (_req, res) => res.sendFile(resolve(dist, 'index.html')));
   }
   app.use((error, _req, res, _next) => {
+    if (
+      error.status &&
+      [
+        'MAIL_NOT_CONFIGURED',
+        'MAIL_DELIVERY_FAILED',
+        'EMAIL_ALREADY_VERIFIED',
+        'INVALID_CREDENTIALS',
+        'VERIFICATION_COOLDOWN',
+        'VERIFICATION_SEND_LIMIT',
+        'VERIFICATION_INVALID',
+        'VERIFICATION_EXPIRED',
+        'VERIFICATION_ATTEMPTS_EXCEEDED',
+      ].includes(error.message)
+    )
+      return res.status(error.status).json({ error: error.message, ...error.details });
     if (error instanceof z.ZodError)
       return res.status(400).json({
-        error: 'INVALID_INPUT',
+        error: error.issues.some((issue) => issue.message === 'EMAIL_MISMATCH')
+          ? 'EMAIL_MISMATCH'
+          : 'INVALID_INPUT',
         fields: error.issues.map((issue) => issue.path.join('.')),
       });
     if (error.type === 'entity.too.large')

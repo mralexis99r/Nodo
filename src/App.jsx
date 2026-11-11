@@ -523,24 +523,98 @@ function Auth({ t, locale, setLanguage, onAuth, initialError }) {
   const [register, setRegister] = useState(false);
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
+  const [verification, setVerification] = useState(null);
+  const [code, setCode] = useState('');
+  const [time, setTime] = useState(Date.now());
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!verification) return;
+    const interval = setInterval(() => setTime(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [Boolean(verification)]);
   async function submit(event) {
     event.preventDefault();
     setError('');
     setBusy(true);
     const data = Object.fromEntries(new FormData(event.currentTarget));
     try {
-      onAuth(
-        await api(`/auth/${register ? 'register' : 'login'}`, {
-          method: 'POST',
-          body: { ...data, language: locale },
-        }),
-      );
+      if (
+        register &&
+        data.email.trim().toLowerCase() !== data.emailConfirmation.trim().toLowerCase()
+      ) {
+        setError('EMAIL_MISMATCH');
+        return;
+      }
+      const result = await api(`/auth/${register ? 'register' : 'login'}`, {
+        method: 'POST',
+        body: { ...data, language: locale },
+      });
+      if (result.verificationRequired) {
+        setVerification({ ...result.verification, password: data.password });
+        setTime(Date.now());
+        setCode('');
+        setNotice('verificationSent');
+      } else onAuth(result);
     } catch (err) {
+      if (err.details?.verification) {
+        setVerification({ ...err.details.verification, password: data.password });
+        setCode('');
+        setTime(Date.now());
+      }
       setError(err.message);
     } finally {
       setBusy(false);
     }
   }
+  async function verify(event) {
+    event.preventDefault();
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      onAuth(
+        await api('/auth/verify-email', {
+          method: 'POST',
+          body: { email: verification.email, password: verification.password, code },
+        }),
+      );
+      setVerification(null);
+      setCode('');
+    } catch (err) {
+      setError(err.message);
+      if (err.details?.verification)
+        setVerification((current) => ({ ...current, ...err.details.verification }));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function resend() {
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      const result = await api('/auth/resend-verification', {
+        method: 'POST',
+        body: { email: verification.email, password: verification.password },
+      });
+      setVerification((current) => ({ ...current, ...result.verification }));
+      setCode('');
+      setTime(Date.now());
+      setNotice('verificationSent');
+    } catch (err) {
+      setError(err.message);
+      if (err.details?.verification)
+        setVerification((current) => ({ ...current, ...err.details.verification }));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const resendSeconds = verification
+    ? Math.max(0, Math.ceil((verification.resendAt - time) / 1000))
+    : 0;
+  const expirySeconds = verification?.expiresAt
+    ? Math.max(0, Math.ceil((verification.expiresAt - time) / 1000))
+    : 0;
   return (
     <div className="auth-shell">
       <section className="auth-story">
@@ -570,66 +644,154 @@ function Auth({ t, locale, setLanguage, onAuth, initialError }) {
           <option value="es">Español</option>
           <option value="en">English</option>
         </select>
-        <form className="auth-form" onSubmit={submit}>
-          <div className="auth-mobile-logo">
-            <Logo />
-          </div>
-          <span className="eyebrow">{t('welcomeBack')}</span>
-          <h2>{t(register ? 'registerTitle' : 'loginTitle')}</h2>
-          <p>{t(register ? 'registerBody' : 'loginBody')}</p>
-          <ErrorMessage error={error} t={t} />
-          {register && (
+        {verification ? (
+          <form className="auth-form verification-form" onSubmit={verify}>
+            <div className="auth-mobile-logo">
+              <Logo />
+            </div>
+            <span className="eyebrow">{t('verifyEmailLabel')}</span>
+            <h2>{t('verifyEmailTitle')}</h2>
+            <p>{t('verifyEmailBody', { email: verification.email })}</p>
+            <ErrorMessage error={error} t={t} />
+            {notice && (
+              <div className="verification-notice" role="status">
+                {t(notice)}
+              </div>
+            )}
             <label>
-              {t('name')}
+              {t('verificationCode')}
               <input
-                name="name"
+                name="code"
+                className="verification-code"
+                autoFocus
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                minLength={6}
+                maxLength={6}
                 required
-                maxLength={80}
-                autoComplete="name"
-                placeholder={t('namePlaceholder')}
+                value={code}
+                placeholder="000000"
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
               />
             </label>
-          )}
-          <label>
-            {t('email')}
-            <input
-              name="email"
-              type="email"
-              required
-              maxLength={254}
-              autoComplete="email"
-              placeholder="name@example.com"
-            />
-          </label>
-          <label>
-            {t('password')}
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={10}
-              maxLength={128}
-              autoComplete={register ? 'new-password' : 'current-password'}
-              placeholder={t('passwordHint')}
-            />
-          </label>
-          <button className="button primary auth-submit" disabled={busy}>
-            {busy ? <span className="loader small" /> : t(register ? 'registerAction' : 'login')}
-            <ArrowRight size={16} />
-          </button>
-          <div className="auth-toggle">
-            {t(register ? 'haveAccount' : 'noAccount')}{' '}
+            <p className="verification-expiry">
+              {expirySeconds
+                ? t('verificationExpires', {
+                    minutes: Math.floor(expirySeconds / 60),
+                    seconds: String(expirySeconds % 60).padStart(2, '0'),
+                  })
+                : t('verificationRequestNew')}
+            </p>
+            <button
+              className="button primary auth-submit"
+              disabled={busy || code.length !== 6 || !expirySeconds}
+            >
+              {busy ? <span className="loader small" /> : t('verifyEmailAction')}
+              <ArrowRight size={16} />
+            </button>
             <button
               type="button"
-              onClick={() => {
-                setRegister(!register);
-                setError('');
-              }}
+              className="button secondary verification-resend"
+              disabled={busy || resendSeconds > 0}
+              onClick={resend}
             >
-              {t(register ? 'login' : 'register')}
+              {resendSeconds
+                ? t('verificationResendWait', { seconds: resendSeconds })
+                : t('verificationResend')}
             </button>
-          </div>
-        </form>
+            <p className="verification-help">{t('verificationHelp')}</p>
+            <div className="auth-toggle">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setVerification(null);
+                  setRegister(false);
+                  setCode('');
+                  setNotice('');
+                  setError('');
+                }}
+              >
+                {t('backToLogin')}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form className="auth-form" onSubmit={submit}>
+            <div className="auth-mobile-logo">
+              <Logo />
+            </div>
+            <span className="eyebrow">{t('welcomeBack')}</span>
+            <h2>{t(register ? 'registerTitle' : 'loginTitle')}</h2>
+            <p>{t(register ? 'registerBody' : 'loginBody')}</p>
+            <ErrorMessage error={error} t={t} />
+            {register && (
+              <label>
+                {t('name')}
+                <input
+                  name="name"
+                  required
+                  maxLength={80}
+                  autoComplete="name"
+                  placeholder={t('namePlaceholder')}
+                />
+              </label>
+            )}
+            <label>
+              {t('email')}
+              <input
+                name="email"
+                type="email"
+                required
+                maxLength={254}
+                autoComplete="email"
+                placeholder="name@example.com"
+              />
+            </label>
+            {register && (
+              <label>
+                {t('emailConfirmation')}
+                <input
+                  name="emailConfirmation"
+                  type="email"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                />
+              </label>
+            )}
+            <label>
+              {t('password')}
+              <input
+                name="password"
+                type="password"
+                required
+                minLength={10}
+                maxLength={128}
+                autoComplete={register ? 'new-password' : 'current-password'}
+                placeholder={t('passwordHint')}
+              />
+            </label>
+            <button className="button primary auth-submit" disabled={busy}>
+              {busy ? <span className="loader small" /> : t(register ? 'registerAction' : 'login')}
+              <ArrowRight size={16} />
+            </button>
+            <div className="auth-toggle">
+              {t(register ? 'haveAccount' : 'noAccount')}{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setRegister(!register);
+                  setError('');
+                }}
+              >
+                {t(register ? 'login' : 'register')}
+              </button>
+            </div>
+          </form>
+        )}
         <span className="auth-panel-footer">Nodo &copy; {new Date().getFullYear()}</span>
       </section>
     </div>

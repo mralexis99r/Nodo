@@ -6,31 +6,37 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import request from 'supertest';
 import { createApp } from '../app.js';
+import { createTestApp, registerVerified } from './helpers.js';
 import { summarize } from '../db.js';
 import { sampleProject } from '../sample.js';
 import { pageSchema } from '../schema.js';
 import { messages, translate } from '../../src/i18n.js';
 
-const app = createApp({ databasePath: ':memory:', authLimit: 500 });
+const app = createTestApp({ authLimit: 500 });
 const alice = request.agent(app),
   bob = request.agent(app);
 const header = { 'X-Nodo-Client': 'web' };
 const password = 'Testing-a-local-workspace-2026';
 let projectId, pageId;
-const call = (agent, method, path, body) => agent[method](path).set(header).send(body);
+const call = (agent, method, path, body) =>
+  agent[method](path)
+    .set(header)
+    .send(
+      path === '/api/auth/register' && body ? { emailConfirmation: body.email, ...body } : body,
+    );
 
 before(async () => {
-  await call(alice, 'post', '/api/auth/register', {
+  await registerVerified(app, alice, {
     name: 'Alicia',
     email: 'alice@example.test',
     password,
-  }).expect(201);
-  await call(bob, 'post', '/api/auth/register', {
+  });
+  await registerVerified(app, bob, {
     name: 'Bob',
     email: 'bob@example.test',
     password,
     language: 'en',
-  }).expect(201);
+  });
   const project = await call(alice, 'post', '/api/projects/sample').expect(201);
   projectId = project.body.id;
   const detail = await alice.get(`/api/projects/${projectId}`).expect(200);
@@ -290,13 +296,13 @@ test('logout invalidates the server-side session', async () => {
 test('accounts, sessions, and projects persist after reopening SQLite', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'nodo-persistence-'));
   const databasePath = join(directory, 'test.sqlite');
-  let current = createApp({ databasePath });
+  let current = createTestApp({ databasePath });
   try {
-    const registration = await call(request(current), 'post', '/api/auth/register', {
+    const registration = await registerVerified(current, request(current), {
       name: 'Persistencia',
       email: 'persistence@example.test',
       password,
-    }).expect(201);
+    });
     const cookie = registration.headers['set-cookie'][0].split(';')[0];
     const result = await request(current)
       .post('/api/projects')
@@ -305,7 +311,7 @@ test('accounts, sessions, and projects persist after reopening SQLite', async ()
       .send({ title: 'Proyecto persistente' })
       .expect(201);
     current.locals.db.close();
-    current = createApp({ databasePath });
+    current = createTestApp({ databasePath });
     const stored = await request(current)
       .get(`/api/projects/${result.body.id}`)
       .set('Cookie', cookie)
@@ -319,17 +325,17 @@ test('accounts, sessions, and projects persist after reopening SQLite', async ()
 });
 
 test('production sessions set Secure cookies', async () => {
-  const productionApp = createApp({
+  const productionApp = createTestApp({
     databasePath: ':memory:',
     production: true,
     origin: 'https://nodo.example.com',
   });
   try {
-    const response = await call(request(productionApp), 'post', '/api/auth/register', {
+    const response = await registerVerified(productionApp, request(productionApp), {
       name: 'Production',
       email: 'production@example.test',
       password,
-    }).expect(201);
+    });
     assert.match(response.headers['set-cookie'][0], /; Secure/);
   } finally {
     productionApp.locals.db.close();

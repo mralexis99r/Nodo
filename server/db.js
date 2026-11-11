@@ -32,8 +32,23 @@ export function openDatabase(filename) {
     CREATE INDEX IF NOT EXISTS projects_owner ON projects(user_id, deleted_at);
     CREATE INDEX IF NOT EXISTS pages_project ON pages(project_id, deleted_at);
     CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
-    PRAGMA user_version = 1;
   `);
+  const version = db.prepare('PRAGMA user_version').get().user_version;
+  if (version < 2) {
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE users ADD COLUMN email_verified_at TEXT;
+        CREATE TABLE email_verifications (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          code_hash TEXT, expires_at INTEGER NOT NULL DEFAULT 0,
+          attempts INTEGER NOT NULL DEFAULT 0, last_sent_at INTEGER NOT NULL DEFAULT 0,
+          send_count INTEGER NOT NULL DEFAULT 0, window_started_at INTEGER NOT NULL DEFAULT 0
+        );
+        DELETE FROM sessions;
+        PRAGMA user_version = 2;
+      `);
+    });
+  }
   return db;
 }
 

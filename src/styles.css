@@ -2695,3 +2695,31 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+.verification-code {
+  font-size: 26px;
+  text-align: center;
+  letter-spacing: 0.4em;
+  font-variant-numeric: tabular-nums;
+  padding: 14px;
+}
+.verification-notice {
+  color: var(--green);
+  background: var(--green-tint);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.verification-form .verification-expiry {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.verification-resend {
+  width: 100%;
+  margin-top: 10px;
+}
+.verification-form .verification-help {
+  font-size: 11px;
+  margin: 18px 0 0;
+}

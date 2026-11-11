@@ -15,7 +15,7 @@ export async function api(path, options = {}) {
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/auth/') && path !== '/me')
       window.dispatchEvent(new Event('nodo-session-expired'));
-    throw new Error(payload.error || 'SERVER_ERROR');
+    throw Object.assign(new Error(payload.error || 'SERVER_ERROR'), { details: payload });
   }
   return payload;
 }

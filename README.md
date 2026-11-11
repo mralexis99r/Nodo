@@ -15,9 +15,9 @@ npm ci
 npm run dev
 ```
 
-Abre [Nodo en tu equipo](http://127.0.0.1:5173). La API se ejecuta en el puerto 3001. Crea tu cuenta desde la pantalla de acceso. Puedes explorar un proyecto de ejemplo desde el inicio; sus datos son editables y pertenecen únicamente a tu cuenta.
+Abre [Nodo en tu equipo](http://127.0.0.1:5173). La API se ejecuta en el puerto 3001. Para crear y activar cuentas debes [configurar primero el envío de correo SMTP](docs/email-verification.md). El registro pide escribir el correo dos veces y confirmarlo con un código de seis dígitos. Puedes explorar un proyecto de ejemplo desde el inicio; sus datos son editables y pertenecen únicamente a tu cuenta.
 
-La configuración predeterminada funciona sin `.env`. Para modificarla:
+La aplicación puede arrancar sin `.env`, pero no activa cuentas sin correo verificado. Para configurar el correo y las demás opciones:
 
 ```powershell
 Copy-Item .env.example .env
@@ -28,6 +28,7 @@ Copy-Item .env.example .env
 ## Incluido en la versión 0.1
 
 - Registro, acceso y cierre de sesión con cuentas independientes.
+- Verificación obligatoria por correo: código de seis dígitos, caducidad de 10 minutos y un solo uso; reenvíos con límites y anulación del código anterior.
 - Dashboard con proyectos activos, trabajo pendiente y completado, y páginas recientes.
 - Proyectos con nombre, descripción, icono, color y favoritos.
 - Páginas como pestañas: por ejemplo, Feature Login y Feature Payments.

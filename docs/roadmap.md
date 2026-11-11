@@ -17,7 +17,9 @@ La dirección del producto es mantener Nodo simple, funcional y minimalista. Est
 ## Siguiente iteración: decisiones con el arquitecto
 
 - [ ] Revisar la experiencia visual y los flujos con uso diario real.
-- [ ] Recuperación de contraseña y verificación de correo.
+- [x] Confirmación doble del correo y verificación obligatoria por código de uso único.
+- [ ] Configurar un proveedor SMTP real para enviar códigos.
+- [ ] Recuperación de contraseña.
 - [ ] Exportación y respaldo desde la interfaz.
 - [ ] Importar notas y contenido desde Notion o Markdown.
 - [ ] Tablas con columnas personalizadas y vistas de tablero.
