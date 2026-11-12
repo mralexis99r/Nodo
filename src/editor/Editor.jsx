@@ -30,6 +30,8 @@ import {
   Status,
 } from '../ui';
 import RichText from './RichText';
+import QATracker from './QATracker';
+import { workUnits } from '../../shared/qa';
 
 const uuid = () => crypto.randomUUID();
 const blankDocument = () => ({ type: 'doc', content: [{ type: 'paragraph' }] });
@@ -128,6 +130,8 @@ export default function Editor({
       blocks: current.blocks.map((block) => (block.id === id ? { ...block, ...patch } : block)),
     }));
   function addBlock(type) {
+    const qaKind = type === 'qa-bugs' ? 'bugs' : 'cases';
+    if (type === 'qa-bugs') type = 'qa';
     if (type === 'link') {
       setModal('link');
       return;
@@ -137,9 +141,17 @@ export default function Editor({
       type,
       ...(type === 'text'
         ? { content: blankDocument() }
-        : type === 'table'
-          ? { title: t('tableTitle'), rows: [] }
-          : { title: t('reportTitle') }),
+        : type === 'qa'
+          ? {
+              title: t(qaKind === 'cases' ? 'qaCases' : 'qaBugRegister'),
+              kind: qaKind,
+              source: '',
+              options: { classification: [], automation: [], note: [] },
+              rows: [],
+            }
+          : type === 'table'
+            ? { title: t('tableTitle'), rows: [] }
+            : { title: t('reportTitle') }),
     };
     change((current) => ({ ...current, blocks: [...current.blocks, block] }));
   }
@@ -156,7 +168,7 @@ export default function Editor({
         blocks.splice(index + 1, 0, {
           ...structuredClone(block),
           id: uuid(),
-          ...(block.type === 'table'
+          ...(['table', 'qa'].includes(block.type)
             ? { rows: block.rows.map((row) => ({ ...row, id: uuid() })) }
             : {}),
         });
@@ -164,7 +176,7 @@ export default function Editor({
     });
   }
   const localSummary = (() => {
-    const rows = draft.blocks.filter((b) => b.type === 'table').flatMap((b) => b.rows);
+    const rows = workUnits([draft]);
     return rows.length
       ? {
           total: rows.length,
@@ -295,6 +307,9 @@ export default function Editor({
               {block.type === 'table' && (
                 <TaskTable block={block} onChange={(patch) => updateBlock(block.id, patch)} t={t} />
               )}
+              {block.type === 'qa' && (
+                <QATracker block={block} onChange={(patch) => updateBlock(block.id, patch)} t={t} />
+              )}
               {block.type === 'report' && (
                 <Report
                   block={block}
@@ -316,6 +331,8 @@ export default function Editor({
         {[
           [Type, 'text', 'textBlock'],
           [Table2, 'table', 'tableBlock'],
+          [Table2, 'qa', 'qaCases'],
+          [Table2, 'qa-bugs', 'qaBugRegister'],
           [BarChart3, 'report', 'reportBlock'],
           [Link2, 'link', 'linkBlock'],
         ].map(([Component, type, label]) => (

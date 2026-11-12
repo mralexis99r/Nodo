@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { qaStatuses } from '../shared/qa.js';
 
 export const icons = [
   'layers',
@@ -91,7 +92,42 @@ export const taskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']),
   url: z.union([z.literal(''), safeUrl]).default(''),
 });
+export const qaRowSchema = z.object({
+  id: z.uuid(),
+  reference: z.string().max(500).default(''),
+  title: z.string().max(1000).default(''),
+  status: z.union([z.literal(''), z.enum(qaStatuses)]).default('PENDIENTE'),
+  classification: z.string().max(200).default(''),
+  automation: z.string().max(200).default(''),
+  bug: z.string().max(10000).default(''),
+  url: z.union([z.literal(''), safeUrl]).default(''),
+  workItemId: z
+    .string()
+    .regex(/^\d{1,20}$|^$/)
+    .default(''),
+  linkLabel: z.string().max(2000).default(''),
+  note: z.string().max(2000).default(''),
+  history: z.string().max(20000).default(''),
+  module: z.string().max(300).default(''),
+  sourceRow: z.number().int().min(1).optional(),
+});
 export const blockSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.uuid(),
+    type: z.literal('qa'),
+    kind: z.enum(['cases', 'bugs', 'references']),
+    title: z.string().max(120),
+    source: z.string().max(300).default(''),
+    workItemBase: z.union([z.literal(''), safeUrl]).default(''),
+    options: z
+      .object({
+        classification: z.array(z.string().max(200)).max(80).default([]),
+        automation: z.array(z.string().max(200)).max(80).default([]),
+        note: z.array(z.string().max(2000)).max(80).default([]),
+      })
+      .default({ classification: [], automation: [], note: [] }),
+    rows: z.array(qaRowSchema).max(500),
+  }),
   z.object({
     id: z.uuid(),
     type: z.literal('text'),
@@ -123,6 +159,13 @@ export const pageSchema = z.object({
   icon: z.enum(icons).default('file'),
   status: z.enum(statuses).default('todo'),
   blocks: z.array(blockSchema).max(100).default([]),
+});
+export const importProjectSchema = z.object({
+  format: z.literal('nodo-project'),
+  version: z.literal(1),
+  project: projectSchema,
+  pages: z.array(pageSchema).min(1).max(30),
+  warnings: z.array(z.string().max(2000)).max(100).default([]),
 });
 export const profileSchema = z.object({
   name: z.string().trim().min(1).max(80),

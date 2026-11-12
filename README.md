@@ -34,6 +34,7 @@ Copy-Item .env.example .env
 - Páginas como pestañas: por ejemplo, Feature Login y Feature Payments.
 - Bloques de texto con negritas, cursivas, títulos, listas, color y resaltado.
 - Tablas de tareas con estado, prioridad, enlaces y paginación.
+- Importación privada de trackers QA con pestañas por feature, estados originales, histórico, búsqueda y registro de bugs por ID único. Consulta [la migración de trackers](docs/qa-import.md).
 - Reportes de avance calculados a partir de las tareas de todas las páginas.
 - Tarjetas visuales para enlaces de Figma, Jira, Azure DevOps y otros recursos.
 - Guardado automático, reintento y detección de conflictos entre ventanas.

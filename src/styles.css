@@ -1,5 +1,178 @@
 @import 'tailwindcss';
 
+.qa-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+  margin: 22px 0;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.qa-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.qa-summary strong {
+  font-size: 23px;
+  font-weight: 600;
+}
+.qa-summary span,
+.qa-summary p,
+.qa-provenance {
+  font-size: 12px;
+  color: var(--muted);
+}
+.qa-summary p {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+}
+.qa-summary .qa-warning {
+  color: var(--orange);
+}
+.qa-toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0 16px;
+  flex-wrap: wrap;
+}
+.qa-toolbar input,
+.qa-toolbar select {
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--text);
+}
+.qa-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 180px;
+  color: var(--muted);
+}
+.qa-search input {
+  width: 100%;
+}
+.qa-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 850px;
+  font-size: 12px;
+}
+.qa-table th {
+  text-align: left;
+  color: var(--muted);
+  background: var(--surface);
+  font-weight: 500;
+}
+.qa-table td,
+.qa-table th {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.qa-table td {
+  vertical-align: top;
+}
+.qa-table tr:hover {
+  background: var(--hover);
+}
+.qa-open {
+  text-align: left;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+  max-width: 180px;
+  font: inherit;
+}
+.qa-case-title {
+  color: var(--text);
+  max-width: 290px;
+  min-width: 150px;
+}
+.qa-state {
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 7px;
+  max-width: 160px;
+  font-size: 11px;
+  background: var(--orange-tint);
+  color: var(--orange);
+}
+.qa-state option {
+  background: var(--paper);
+  color: var(--text);
+}
+.qa-validated {
+  background: var(--green-tint);
+  color: var(--green);
+}
+.qa-closed {
+  background: var(--gray-tint);
+  color: var(--gray);
+}
+.qa-bug {
+  background: var(--rose-tint);
+  color: var(--rose);
+}
+.qa-blocked {
+  background: var(--purple-tint);
+  color: var(--purple);
+}
+.qa-detail,
+.qa-import {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.qa-detail label,
+.qa-import label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+}
+.qa-detail input,
+.qa-detail textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: var(--paper);
+  color: var(--text);
+  font: inherit;
+}
+.qa-detail textarea {
+  resize: vertical;
+}
+.qa-import p,
+.qa-import li {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.qa-import details ul {
+  padding-left: 20px;
+  margin-top: 10px;
+}
+.qa-import-pages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+}
+.qa-import-pages li {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 7px 0;
+  gap: 15px;
+}
+
 @theme {
   --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
   --color-canvas: var(--canvas);

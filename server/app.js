@@ -22,6 +22,7 @@ import {
   projectSchema,
   pageSchema,
   verificationSchema,
+  importProjectSchema,
 } from './schema.js';
 import { sampleProject } from './sample.js';
 import { createVerificationMailer } from './mailer.js';
@@ -276,9 +277,8 @@ export function createApp({
       );
     return parsePage(await db.prepare('SELECT * FROM pages WHERE id = ?').get(id));
   }
-  async function insertProject(userId, input) {
-    const id = randomUUID(),
-      date = now();
+  async function insertProject(userId, input, id = randomUUID()) {
+    const date = now();
     await db
       .prepare(
         'INSERT INTO projects (id, user_id, title, description, icon, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -369,6 +369,35 @@ export function createApp({
     });
     res.status(201).json({ id });
   });
+  app.post('/api/projects/import', async (req, res) => {
+    const input = importProjectSchema.parse(req.body);
+    const digest = hash(`${req.user.id}:${JSON.stringify(input)}`);
+    const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+    const result = await db.transaction(async () => {
+      await db.lockUser(req.user.id);
+      const existing = await getProject(id, req.user.id, true);
+      if (existing) return { id, existing: true, inTrash: Boolean(existing.deleted_at) };
+      await insertProject(req.user.id, input.project, id);
+      for (const [index, page] of input.pages.entries()) {
+        await insertPage(
+          id,
+          {
+            ...page,
+            blocks: page.blocks.map((block) => ({
+              ...block,
+              id: randomUUID(),
+              ...(['table', 'qa'].includes(block.type)
+                ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
+                : {}),
+            })),
+          },
+          index,
+        );
+      }
+      return { id, existing: false, inTrash: false };
+    });
+    res.status(result.existing ? 200 : 201).json(result);
+  });
   app.get('/api/trash', async (req, res) => {
     const projects = await db
       .prepare(
@@ -444,7 +473,7 @@ export function createApp({
             blocks: page.blocks.map((block) => ({
               ...block,
               id: randomUUID(),
-              ...(block.type === 'table'
+              ...(['table', 'qa'].includes(block.type)
                 ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
                 : {}),
             })),
@@ -530,7 +559,7 @@ export function createApp({
         blocks: page.blocks.map((block) => ({
           ...block,
           id: randomUUID(),
-          ...(block.type === 'table'
+          ...(['table', 'qa'].includes(block.type)
             ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
             : {}),
         })),

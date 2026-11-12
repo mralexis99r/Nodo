@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { summarizeQA, workUnits } from '../shared/qa.js';
 
 export function openDatabase(filename) {
   if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true });
@@ -65,9 +66,7 @@ export function transaction(db, callback) {
 }
 
 export function summarize(pages) {
-  const tasks = pages.flatMap((page) =>
-    page.blocks.filter((b) => b.type === 'table').flatMap((b) => b.rows),
-  );
+  const tasks = workUnits(pages);
   const units = tasks.length ? tasks : pages;
   const counts = Object.fromEntries(
     ['todo', 'progress', 'blocked', 'done'].map((status) => [
@@ -94,5 +93,6 @@ export function summarize(pages) {
     status,
     pages: pages.length,
     tasks: tasks.length,
+    qa: summarizeQA(pages),
   };
 }

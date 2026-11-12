@@ -1,5 +1,7 @@
+import { qaMessages } from './qa-i18n.js';
 export const messages = {
   es: {
+    ...qaMessages.es,
     emailConfirmation: 'Confirmar correo electrónico',
     verifyEmailLabel: 'VERIFICACIÓN DE CORREO',
     verifyEmailTitle: 'Confirma que eres tú',
@@ -228,6 +230,8 @@ export const messages = {
     confirmLogout: 'Cerrar sesión',
     linkRequired: 'Pega el enlace de Jira, Azure DevOps, Figma u otro recurso.',
     errors: {
+      INVALID_IMPORT:
+        'El archivo no es un paquete válido de Nodo. Elige el archivo .json preparado para la migración.',
       EMAIL_MISMATCH: 'Los dos correos electrónicos deben coincidir.',
       EMAIL_NOT_VERIFIED:
         'Tu cuenta está pendiente de verificación. Ingresa el código vigente o solicita uno nuevo.',
@@ -259,6 +263,7 @@ export const messages = {
     },
   },
   en: {
+    ...qaMessages.en,
     emailConfirmation: 'Confirm email address',
     verifyEmailLabel: 'EMAIL VERIFICATION',
     verifyEmailTitle: 'Confirm it is you',
@@ -486,6 +491,8 @@ export const messages = {
     linkRequired: 'Paste a Jira, Azure DevOps, Figma, or another resource link.',
     errors: {
       EMAIL_MISMATCH: 'Both email addresses must match.',
+      INVALID_IMPORT:
+        'This is not a valid Nodo package. Choose the .json file prepared for migration.',
       EMAIL_NOT_VERIFIED:
         'Your account is pending verification. Enter the current code or request a new one.',
       EMAIL_ALREADY_VERIFIED: 'This email is already verified. Sign in to continue.',

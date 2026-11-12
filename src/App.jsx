@@ -46,6 +46,7 @@ import {
 } from './ui';
 import { useResource } from './hooks';
 const Project = lazy(() => import('./Project'));
+const ImportProject = lazy(() => import('./ImportProject'));
 
 function readRoute() {
   const [view = 'dashboard', projectId, pageId] = location.hash.slice(1).split('/');
@@ -334,6 +335,10 @@ export default function App() {
             <Plus size={16} />
             {t('newProject')}
           </button>
+          <button className="nav-item" onClick={() => setModal({ type: 'import' })}>
+            <ArrowDownToLine size={16} />
+            {t('importProject')}
+          </button>
         </div>
         <div className="sidebar-bottom">
           <div className="privacy-note">
@@ -485,6 +490,19 @@ export default function App() {
             <X size={14} />
           </IconButton>
         </div>
+      )}
+      {modal?.type === 'import' && (
+        <Suspense fallback={<Loading t={t} />}>
+          <ImportProject
+            t={t}
+            onClose={() => setModal(null)}
+            onImported={async (id) => {
+              await navigate(`project/${id}`);
+              invalidate();
+              setModal(null);
+            }}
+          />
+        </Suspense>
       )}
       {modal?.type === 'project' && (
         <ProjectForm

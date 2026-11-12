@@ -18,11 +18,11 @@ import {
   Status,
 } from './ui';
 import Editor from './editor/Editor';
+import { summarizeQA, workUnits } from '../shared/qa';
+import { QASummary } from './editor/QATracker';
 
 export function summarizePages(pages) {
-  const tasks = pages.flatMap((page) =>
-    page.blocks.filter((block) => block.type === 'table').flatMap((block) => block.rows),
-  );
+  const tasks = workUnits(pages);
   const units = tasks.length ? tasks : pages;
   const counts = Object.fromEntries(
     Object.keys(statusKeys).map((status) => [
@@ -43,6 +43,7 @@ export function summarizePages(pages) {
           : 'todo',
     pages: pages.length,
     tasks: tasks.length,
+    qa: summarizeQA(pages),
   };
 }
 
@@ -143,12 +144,17 @@ export default function Project({
       <div className="project-meta">
         <Status value={summary.status} t={t} />
         <span>{t('pageCount', { count: summary.pages })}</span>
-        <span>{t('taskCount', { count: summary.tasks })}</span>
+        <span>
+          {summary.qa && summary.qa.total === summary.tasks
+            ? `${summary.qa.total} ${t('qaCases')}`
+            : t('taskCount', { count: summary.tasks })}
+        </span>
         <div className="project-meta-progress" title={t('statusHint')}>
           <Progress value={summary.progress} color={project.color} />
           <strong>{summary.progress}%</strong>
         </div>
       </div>
+      {summary.qa && <QASummary summary={summary.qa} t={t} />}
       <div className="project-tabs">
         <div className="project-tab-list" role="tablist" aria-label={t('features')}>
           {project.pages.map((item) => (

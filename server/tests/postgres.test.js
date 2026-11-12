@@ -6,6 +6,7 @@ import { createPostgresStorage, postgresOptions, postgresSql, createStorage } fr
 import { createTestApp, registerVerified, headers } from './helpers.js';
 import { openDatabase } from '../db.js';
 import { importSQLite } from '../import-sqlite.js';
+import { qaPackage } from './qa-fixture.js';
 
 // Run the same tests against real PostgreSQL in CI and embedded PostgreSQL locally.
 async function embeddedPool() {
@@ -86,6 +87,21 @@ test('PostgreSQL preserves project pages, summaries, favorites, and user privacy
   await owner.patch(`/api/projects/${projectId}`).set(headers).send({ favorite: true }).expect(200);
   assert.equal((await owner.get('/api/projects?favorite=true').expect(200)).body.total, 1);
   assert.equal((await owner.get('/api/dashboard').expect(200)).body.completed, 1);
+});
+
+test('PostgreSQL imports QA atomically, serializes repeated imports and preserves private summaries', async () => {
+  const data = qaPackage();
+  const results = await Promise.all([
+    post(owner, '/api/projects/import', data),
+    post(owner, '/api/projects/import', data),
+  ]);
+  assert.deepEqual(results.map((result) => result.status).sort(), [200, 201]);
+  const id = results[0].body.id;
+  assert.equal(results[1].body.id, id);
+  const project = (await owner.get(`/api/projects/${id}`).expect(200)).body;
+  assert.equal(project.summary.qa.total, 3);
+  assert.equal(project.summary.qa.openBugs, 1);
+  await other.get(`/api/projects/${id}`).expect(404);
 });
 
 test('PostgreSQL rejects stale edits and recalculates task summaries', async () => {
