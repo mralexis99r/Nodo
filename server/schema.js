@@ -166,7 +166,12 @@ export const blockSchema = z.discriminatedUnion('type', [
     title: z.string().max(120),
     rows: z.array(taskSchema).max(500),
   }),
-  z.object({ id: z.uuid(), type: z.literal('report'), title: z.string().max(120) }),
+  z.object({
+    id: z.uuid(),
+    type: z.literal('report'),
+    title: z.string().max(120),
+    scope: z.enum(['page', 'project']).optional(),
+  }),
   z.object({
     id: z.uuid(),
     type: z.literal('link'),

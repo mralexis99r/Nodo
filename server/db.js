@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { summarizeQA, workUnits } from '../shared/qa.js';
+export { summarize } from '../shared/progress.js';
 
 export function openDatabase(filename) {
   if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true });
@@ -63,36 +63,4 @@ export function transaction(db, callback) {
     db.exec('ROLLBACK');
     throw error;
   }
-}
-
-export function summarize(pages) {
-  const tasks = workUnits(pages);
-  const units = tasks.length ? tasks : pages;
-  const counts = Object.fromEntries(
-    ['todo', 'progress', 'blocked', 'done'].map((status) => [
-      status,
-      units.filter((unit) => unit.status === status).length,
-    ]),
-  );
-  const progress = units.length ? Math.round((counts.done / units.length) * 100) : 0;
-  const status = counts.blocked
-    ? 'blocked'
-    : units.length && counts.done === units.length
-      ? 'done'
-      : counts.progress || counts.done
-        ? 'progress'
-        : 'todo';
-  return {
-    counts,
-    todo: counts.todo,
-    inProgress: counts.progress,
-    blocked: counts.blocked,
-    done: counts.done,
-    total: units.length,
-    progress,
-    status,
-    pages: pages.length,
-    tasks: tasks.length,
-    qa: summarizeQA(pages),
-  };
 }

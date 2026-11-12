@@ -38,7 +38,7 @@ Copy-Item .env.example .env
 - Selección múltiple de ATC y edición por lote de estado, clasificación y automatización.
 - Catálogos estándar y reportes configurables como gráficas de barras o tablas.
 - Tabla de HUs y trabajo para desarrollo, con tipo, área y recordatorios por fecha en Inicio.
-- Reportes de avance calculados a partir de las tareas de todas las páginas.
+- Reportes de avance por feature o por proyecto, con alcance seleccionable. Las páginas con tareas o casos muestran su propio avance; las páginas de resumen consolidan todo el proyecto.
 - Tarjetas visuales para enlaces de Figma, Jira, Azure DevOps y otros recursos.
 - Guardado automático, reintento y detección de conflictos entre ventanas.
 - Edición, duplicación y papelera recuperable para proyectos y páginas.

@@ -147,7 +147,7 @@ def convert(source):
     warnings.append('El resumen se recalcula a partir de los registros importados, incluyendo los casos sin referencia. Consolidacion y las fórmulas auxiliares no se duplican como casos.')
     bug_page = {'title': 'Bugs Azure', 'icon': 'code', 'status': 'todo', 'blocks': [{'id': uid('bugs:block'), 'type': 'qa', 'kind': 'bugs', 'title': 'Registro de bugs', 'source': source.name + ' / Bugs Azure', 'workItemBase': base_url, 'options': options, 'rows': list(bugs.values())}]}
     paragraphs = [{'type': 'paragraph', 'content': [{'type': 'text', 'text': text}]} for text in warnings]
-    overview = {'title': 'Resumen QA', 'icon': 'layers', 'status': 'todo', 'blocks': [{'id': uid('summary:report'), 'type': 'report', 'title': 'Trabajo resuelto'}, {'id': uid('summary:notes'), 'type': 'text', 'content': {'type': 'doc', 'content': paragraphs}}]}
+    overview = {'title': 'Resumen QA', 'icon': 'layers', 'status': 'todo', 'blocks': [{'id': uid('summary:report'), 'type': 'report', 'title': 'Trabajo resuelto', 'scope': 'project'}, {'id': uid('summary:notes'), 'type': 'text', 'content': {'type': 'doc', 'content': paragraphs}}]}
     original_summary = next((sheet for sheet in sheets if sheet['name'] == 'Resumen'), {'rows': {}})
     title = value(original_summary['rows'].get(1, {}), 'A').split('/')[-1].strip()
     title = title[:120] or source.stem[:120]

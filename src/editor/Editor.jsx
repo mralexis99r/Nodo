@@ -32,6 +32,7 @@ import {
 import RichText from './RichText';
 import QATracker from './QATracker';
 import { workUnits } from '../../shared/qa';
+import { progressReport, progressScope } from '../../shared/progress';
 import CatalogSelect from './CatalogSelect';
 import RecordReport from './RecordReport';
 
@@ -165,10 +166,15 @@ export default function Editor({
                   title: t('recordReportTitle'),
                   dataset: summary.qa && summary.qa.total === summary.tasks ? 'cases' : 'tasks',
                   field: 'status',
-                  scope: 'project',
+                  scope: progressScope({}, draft),
                   view: 'bars',
                 }
-              : { title: t('reportTitle') }),
+              : {
+                  title: t(
+                    progressScope({}, draft) === 'page' ? 'pageProgressTitle' : 'reportTitle',
+                  ),
+                  scope: progressScope({}, draft),
+                }),
     };
     change((current) => ({ ...current, blocks: [...current.blocks, block] }));
   }
@@ -330,7 +336,7 @@ export default function Editor({
               {block.type === 'report' && (
                 <Report
                   block={block}
-                  summary={summary}
+                  summary={progressReport(block, projectPages, draft)}
                   color={color}
                   t={t}
                   onChange={(patch) => updateBlock(block.id, patch)}
@@ -642,6 +648,19 @@ function Report({ block, summary, color, t, onChange }) {
           onChange={(event) => onChange({ title: event.target.value })}
         />
       </div>
+      <div className="report-controls">
+        <label>
+          {t('reportScope')}
+          <select
+            aria-label={t('reportScope')}
+            value={summary.scope}
+            onChange={(event) => onChange({ scope: event.target.value })}
+          >
+            <option value="page">{t('reportPage')}</option>
+            <option value="project">{t('reportProject')}</option>
+          </select>
+        </label>
+      </div>
       <div className="report-main">
         <div>
           <strong>
@@ -661,7 +680,7 @@ function Report({ block, summary, color, t, onChange }) {
           </div>
         ))}
       </div>
-      <p>{t('autoReport')}</p>
+      <p>{t(summary.scope === 'page' ? 'autoPageReport' : 'autoReport')}</p>
     </div>
   );
 }
