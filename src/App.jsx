@@ -857,6 +857,26 @@ function Dashboard({
           year: 'numeric',
         }).format(new Date())}
       </div>
+      {data.reminders?.length > 0 && (
+        <section className="reminders-panel">
+          <h2>{t('workReminders')}</h2>
+          <p>{t('workRemindersHelp')}</p>
+          {data.reminders.map((reminder) => (
+            <button
+              key={`${reminder.pageId}-${reminder.id}`}
+              onClick={() => navigate(`project/${reminder.projectId}/${reminder.pageId}`)}
+            >
+              <span>
+                {reminder.title || t('task')}
+                <small>{reminder.projectTitle}</small>
+              </span>
+              <time dateTime={reminder.date}>
+                {new Date(`${reminder.date}T00:00:00`).toLocaleDateString(locale)}
+              </time>
+            </button>
+          ))}
+        </section>
+      )}
       <section className="dashboard-banner">
         <div>
           <span className="banner-tag">

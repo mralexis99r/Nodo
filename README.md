@@ -35,6 +35,9 @@ Copy-Item .env.example .env
 - Bloques de texto con negritas, cursivas, títulos, listas, color y resaltado.
 - Tablas de tareas con estado, prioridad, enlaces y paginación.
 - Importación privada de trackers QA con pestañas por feature, estados originales, histórico, búsqueda y registro de bugs por ID único. Consulta [la migración de trackers](docs/qa-import.md).
+- Selección múltiple de ATC y edición por lote de estado, clasificación y automatización.
+- Catálogos estándar y reportes configurables como gráficas de barras o tablas.
+- Tabla de HUs y trabajo para desarrollo, con tipo, área y recordatorios por fecha en Inicio.
 - Reportes de avance calculados a partir de las tareas de todas las páginas.
 - Tarjetas visuales para enlaces de Figma, Jira, Azure DevOps y otros recursos.
 - Guardado automático, reintento y detección de conflictos entre ventanas.

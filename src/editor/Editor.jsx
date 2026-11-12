@@ -32,11 +32,14 @@ import {
 import RichText from './RichText';
 import QATracker from './QATracker';
 import { workUnits } from '../../shared/qa';
+import CatalogSelect from './CatalogSelect';
+import RecordReport from './RecordReport';
 
 const uuid = () => crypto.randomUUID();
 const blankDocument = () => ({ type: 'doc', content: [{ type: 'paragraph' }] });
 
 export default function Editor({
+  projectPages,
   initial,
   t,
   summary,
@@ -130,6 +133,8 @@ export default function Editor({
       blocks: current.blocks.map((block) => (block.id === id ? { ...block, ...patch } : block)),
     }));
   function addBlock(type) {
+    const development = type === 'development';
+    if (development) type = 'table';
     const qaKind = type === 'qa-bugs' ? 'bugs' : 'cases';
     if (type === 'qa-bugs') type = 'qa';
     if (type === 'link') {
@@ -150,8 +155,20 @@ export default function Editor({
               rows: [],
             }
           : type === 'table'
-            ? { title: t('tableTitle'), rows: [] }
-            : { title: t('reportTitle') }),
+            ? {
+                title: t(development ? 'developmentTable' : 'tableTitle'),
+                kind: development ? 'development' : 'tasks',
+                rows: [],
+              }
+            : type === 'record-report'
+              ? {
+                  title: t('recordReportTitle'),
+                  dataset: summary.qa && summary.qa.total === summary.tasks ? 'cases' : 'tasks',
+                  field: 'status',
+                  scope: 'project',
+                  view: 'bars',
+                }
+              : { title: t('reportTitle') }),
     };
     change((current) => ({ ...current, blocks: [...current.blocks, block] }));
   }
@@ -319,6 +336,15 @@ export default function Editor({
                   onChange={(patch) => updateBlock(block.id, patch)}
                 />
               )}
+              {block.type === 'record-report' && (
+                <RecordReport
+                  block={block}
+                  pages={projectPages.map((page) => (page.id === draft.id ? draft : page))}
+                  currentPage={draft}
+                  onChange={(patch) => updateBlock(block.id, patch)}
+                  t={t}
+                />
+              )}
               {block.type === 'link' && (
                 <LinkBlock block={block} onChange={(patch) => updateBlock(block.id, patch)} t={t} />
               )}
@@ -331,9 +357,11 @@ export default function Editor({
         {[
           [Type, 'text', 'textBlock'],
           [Table2, 'table', 'tableBlock'],
+          [Table2, 'development', 'developmentTable'],
           [Table2, 'qa', 'qaCases'],
           [Table2, 'qa-bugs', 'qaBugRegister'],
           [BarChart3, 'report', 'reportBlock'],
+          [BarChart3, 'record-report', 'recordReportTitle'],
           [Link2, 'link', 'linkBlock'],
         ].map(([Component, type, label]) => (
           <button key={type} onClick={() => addBlock(type)}>
@@ -372,6 +400,7 @@ export default function Editor({
 }
 
 function TaskTable({ block, onChange, t }) {
+  const development = block.kind === 'development';
   const [page, setPage] = useState(1);
   const pageSize = 8;
   const pages = Math.max(1, Math.ceil(block.rows.length / pageSize));
@@ -383,7 +412,19 @@ function TaskTable({ block, onChange, t }) {
   function addTask() {
     const id = uuid();
     onChange({
-      rows: [...block.rows, { id, title: '', status: 'todo', priority: 'medium', url: '' }],
+      rows: [
+        ...block.rows,
+        {
+          id,
+          title: '',
+          status: 'todo',
+          priority: 'medium',
+          url: '',
+          itemType: 'task',
+          classification: '',
+          reminderDate: '',
+        },
+      ],
     });
     setPage(Math.ceil((block.rows.length + 1) / pageSize));
     setTimeout(() => document.getElementById(`task-${id}`)?.focus(), 50);
@@ -405,8 +446,15 @@ function TaskTable({ block, onChange, t }) {
           <thead>
             <tr>
               <th>{t('task')}</th>
+              {development && <th>{t('workItemType')}</th>}
               <th>{t('status')}</th>
               <th>{t('priority')}</th>
+              {development && (
+                <>
+                  <th>{t('workArea')}</th>
+                  <th>{t('workReminder')}</th>
+                </>
+              )}
               <th>{t('workLink')}</th>
               <th />
             </tr>
@@ -436,6 +484,18 @@ function TaskTable({ block, onChange, t }) {
                     />
                   </div>
                 </td>
+                {development && (
+                  <td>
+                    <CatalogSelect
+                      dataset="tasks"
+                      field="itemType"
+                      value={row.itemType || 'task'}
+                      label={`${t('workItemType')}: ${row.title}`}
+                      onChange={(itemType) => updateRow(row.id, { itemType })}
+                      t={t}
+                    />
+                  </td>
+                )}
                 <td>
                   <select
                     className={`task-status-select status-${row.status}`}
@@ -464,6 +524,31 @@ function TaskTable({ block, onChange, t }) {
                     ))}
                   </select>
                 </td>
+                {development && (
+                  <>
+                    <td>
+                      <CatalogSelect
+                        dataset="tasks"
+                        field="classification"
+                        value={row.classification || ''}
+                        label={`${t('workArea')}: ${row.title}`}
+                        onChange={(classification) => updateRow(row.id, { classification })}
+                        t={t}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="reminder-date"
+                        type="date"
+                        value={row.reminderDate || ''}
+                        aria-label={`${t('workReminder')}: ${row.title}`}
+                        onChange={(event) =>
+                          updateRow(row.id, { reminderDate: event.target.value })
+                        }
+                      />
+                    </td>
+                  </>
+                )}
                 <td>
                   <TaskUrl
                     key={row.url}

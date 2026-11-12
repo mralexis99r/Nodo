@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { qaStatuses } from '../shared/qa.js';
+import { workAreas, workTypes } from '../shared/catalogs.js';
 
 export const icons = [
   'layers',
@@ -91,6 +92,9 @@ export const taskSchema = z.object({
   status: z.enum(statuses),
   priority: z.enum(['low', 'medium', 'high']),
   url: z.union([z.literal(''), safeUrl]).default(''),
+  itemType: z.enum(workTypes).default('task'),
+  classification: z.union([z.literal(''), z.enum(workAreas)]).default(''),
+  reminderDate: z.union([z.literal(''), z.iso.date()]).default(''),
 });
 export const qaRowSchema = z.object({
   id: z.uuid(),
@@ -112,6 +116,25 @@ export const qaRowSchema = z.object({
   sourceRow: z.number().int().min(1).optional(),
 });
 export const blockSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      id: z.uuid(),
+      type: z.literal('record-report'),
+      title: z.string().max(120),
+      dataset: z.enum(['tasks', 'cases', 'bugs']).default('tasks'),
+      field: z
+        .enum(['status', 'classification', 'automation', 'itemType', 'priority'])
+        .default('status'),
+      scope: z.enum(['project', 'page']).default('project'),
+      view: z.enum(['bars', 'table']).default('bars'),
+    })
+    .refine(
+      (value) =>
+        value.dataset === 'tasks'
+          ? value.field !== 'automation'
+          : ['status', 'classification', 'automation'].includes(value.field),
+      'INVALID_REPORT_FIELD',
+    ),
   z.object({
     id: z.uuid(),
     type: z.literal('qa'),
@@ -136,6 +159,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.uuid(),
     type: z.literal('table'),
+    kind: z.enum(['tasks', 'development']).default('tasks'),
     title: z.string().max(120),
     rows: z.array(taskSchema).max(500),
   }),

@@ -14,6 +14,43 @@ export const qaStatuses = [
   'POR CONFIRMAR',
 ];
 
+export function caseNameFromReference(reference = '') {
+  return reference.trim().match(/^ATC(?:[_-][a-z]+)*[_-]\d+[_-](.+)$/i)?.[1] || '';
+}
+
+export function referenceNamePatch(row, reference) {
+  const automatic =
+    !row.title?.trim() ||
+    row.title === row.reference ||
+    row.title === caseNameFromReference(row.reference);
+  return { reference, ...(automatic ? { title: caseNameFromReference(reference) } : {}) };
+}
+
+export function completeReferenceNames(blocks, previous = []) {
+  const oldRows = new Map(
+    previous
+      .filter((block) => block.type === 'qa' && block.kind === 'cases')
+      .flatMap((block) => block.rows.map((row) => [row.id, row])),
+  );
+  return blocks.map((block) =>
+    block.type !== 'qa' || block.kind !== 'cases'
+      ? block
+      : {
+          ...block,
+          rows: block.rows.map((row) => {
+            const old = oldRows.get(row.id);
+            const changed = !old || old.reference !== row.reference;
+            if (!row.title.trim()) return { ...row, title: caseNameFromReference(row.reference) };
+            if (changed && row.title === row.reference)
+              return { ...row, title: caseNameFromReference(row.reference) || row.title };
+            if (changed && old && row.title === old.title)
+              return { ...row, ...referenceNamePatch(old, row.reference) };
+            return row;
+          }),
+        },
+  );
+}
+
 export function qaCategory(status) {
   if (['PASS', 'CORREGIDO'].includes(status)) return 'validated';
   if (['CERRADO', 'CANCELADO', 'NO APLICA'].includes(status)) return 'closed';

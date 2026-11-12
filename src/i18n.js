@@ -1,7 +1,9 @@
 import { qaMessages } from './qa-i18n.js';
+import { catalogMessages } from './catalog-i18n.js';
 export const messages = {
   es: {
     ...qaMessages.es,
+    ...catalogMessages.es,
     emailConfirmation: 'Confirmar correo electrónico',
     verifyEmailLabel: 'VERIFICACIÓN DE CORREO',
     verifyEmailTitle: 'Confirma que eres tú',
@@ -230,6 +232,8 @@ export const messages = {
     confirmLogout: 'Cerrar sesión',
     linkRequired: 'Pega el enlace de Jira, Azure DevOps, Figma u otro recurso.',
     errors: {
+      INVALID_CATALOG_VALUE:
+        'Elige una opción del catálogo para clasificación o automatización. Los valores originales se conservan hasta que decidas cambiarlos.',
       INVALID_IMPORT:
         'El archivo no es un paquete válido de Nodo. Elige el archivo .json preparado para la migración.',
       EMAIL_MISMATCH: 'Los dos correos electrónicos deben coincidir.',
@@ -264,6 +268,7 @@ export const messages = {
   },
   en: {
     ...qaMessages.en,
+    ...catalogMessages.en,
     emailConfirmation: 'Confirm email address',
     verifyEmailLabel: 'EMAIL VERIFICATION',
     verifyEmailTitle: 'Confirm it is you',
@@ -491,6 +496,8 @@ export const messages = {
     linkRequired: 'Paste a Jira, Azure DevOps, Figma, or another resource link.',
     errors: {
       EMAIL_MISMATCH: 'Both email addresses must match.',
+      INVALID_CATALOG_VALUE:
+        'Choose a catalog option for classification or automation. Original values are kept until you decide to change them.',
       INVALID_IMPORT:
         'This is not a valid Nodo package. Choose the .json file prepared for migration.',
       EMAIL_NOT_VERIFIED:

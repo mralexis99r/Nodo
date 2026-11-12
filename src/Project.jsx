@@ -180,6 +180,7 @@ export default function Project({
       {page ? (
         <section role="tabpanel" id="page-panel" aria-labelledby={`tab-${page.id}`}>
           <Editor
+            projectPages={project.pages}
             key={`${page.id}-${editorEpoch}`}
             initial={page}
             t={t}

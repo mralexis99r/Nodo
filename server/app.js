@@ -27,6 +27,8 @@ import {
 import { sampleProject } from './sample.js';
 import { createVerificationMailer } from './mailer.js';
 import { createEmailVerification } from './email-verification.js';
+import { validQACatalogEdits } from '../shared/catalogs.js';
+import { completeReferenceNames } from '../shared/qa.js';
 
 const scrypt = promisify(scryptCallback);
 const now = () => new Date().toISOString();
@@ -306,6 +308,25 @@ export function createApp({
       })),
     );
     const summary = summarize(allPages);
+    const reminders = allPages
+      .flatMap((page) =>
+        page.blocks
+          .filter((block) => block.type === 'table')
+          .flatMap((block) =>
+            block.rows
+              .filter((row) => row.reminderDate && row.status !== 'done')
+              .map((row) => ({
+                id: row.id,
+                title: row.title,
+                date: row.reminderDate,
+                pageId: page.id,
+                projectId: page.project_id,
+                projectTitle: page.projectTitle,
+              })),
+          ),
+      )
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 10);
     res.json({
       projects: projects.length,
       active: projects.filter((p) => p.summary.status !== 'done').length,
@@ -313,6 +334,7 @@ export function createApp({
       pending: summary.total - summary.done,
       blocked: summary.blocked,
       progress: summary.progress,
+      reminders,
       recent: projects.slice(0, 4),
       pages: allPages.sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5),
     });
@@ -489,6 +511,9 @@ export function createApp({
     if (!(await getProject(req.params.id, req.user.id)))
       return res.status(404).json({ error: 'NOT_FOUND' });
     const input = pageSchema.parse(req.body);
+    input.blocks = completeReferenceNames(input.blocks);
+    if (!validQACatalogEdits(input.blocks))
+      return res.status(400).json({ error: 'INVALID_CATALOG_VALUE' });
     const position = (
       await db
         .prepare(
@@ -504,6 +529,9 @@ export function createApp({
     const page = await getPage(req.params.id, req.user.id);
     if (!page) return res.status(404).json({ error: 'NOT_FOUND' });
     const input = pageSchema.extend({ version: z.number().int().positive() }).parse(req.body);
+    input.blocks = completeReferenceNames(input.blocks, JSON.parse(page.blocks));
+    if (!validQACatalogEdits(input.blocks, JSON.parse(page.blocks)))
+      return res.status(400).json({ error: 'INVALID_CATALOG_VALUE' });
     const result = await db
       .prepare(
         'UPDATE pages SET title = ?, icon = ?, status = ?, blocks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?',

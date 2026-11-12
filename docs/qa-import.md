@@ -27,6 +27,18 @@ En Nodo, inicia sesión y selecciona **Importar proyecto** en la barra lateral. 
 - Si un WI aparece en una feature pero no en el registro central, se incorpora como POR CONFIRMAR. Un enlace y el estado del caso no establecen el estado actual del WI.
 - El estado del caso y el estado del bug se editan por separado. No existe sincronización automática con Azure o Jira.
 
-Las pestañas QA permiten buscar, filtrar, paginar, agregar y editar registros. El detalle muestra todos los campos. Las opciones de clasificación, automatización y última nota provienen del archivo, y también admiten texto propio. Cambiar un ID genera su enlace cuando el tracker proporciona una URL base de Azure.
+Las pestañas QA permiten buscar, filtrar, paginar, agregar y editar registros. El detalle muestra todos los campos. Clasificación y automatización utilizan catálogos estándar con identificadores estables. La última nota admite texto propio. Cambiar un ID genera su enlace cuando el tracker proporciona una URL base de Azure.
+
+Puedes seleccionar ATC con sus casillas y aplicar un estado, clasificación o estado de automatización a todos los seleccionados. La casilla del encabezado selecciona la página actual. **Seleccionar todos los resultados** incluye los resultados de todas las páginas del filtro actual. La selección se mantiene al paginar y se limpia al cambiar la búsqueda o el filtro, cambiar de pestaña, o aplicar el valor. El guardado automático y el resumen se actualizan con el cambio.
+
+Los valores importados se conservan en la base de datos hasta que el usuario los cambia. Los equivalentes conocidos, como CODE/DATA y DATA/CODE, se muestran y agrupan en la misma categoría estándar. El valor de origen se muestra en el título del selector. Un dato ambiguo o sin equivalencia se muestra como **Original** y se reporta por separado; no se asigna a otra categoría automáticamente. La API rechaza valores nuevos fuera de los catálogos, conservando los originales que no se hayan editado.
+
+## Notas, desarrollo y reportes
+
+Al capturar una referencia como `ATC_FT_001_login`, el nombre se completa con `login`. También se reconoce el formato `ATC_FT-002_login`. Si el nombre sigue siendo automático, cambiar la referencia lo actualiza; un nombre personalizado se conserva. Esta regla se aplica al crear o editar casos, sin renombrar de manera masiva los registros importados.
+
+Los bloques de texto siguen disponibles para apuntes y análisis. **HUs y trabajo** crea una tabla con tipo (historia de usuario, feature, tarea, bug o análisis técnico), estado, prioridad, área, enlace y recordatorio por fecha. Los estados de trabajo son Pendiente, En curso, Bloqueado y Completado. Sus recordatorios aparecen en Inicio, ordenados por fecha, hasta completar el registro. Son recordatorios dentro de Nodo, sin envío programado de notificaciones o correos.
+
+**Gráfica o reporte** permite elegir entre trabajo, casos QA y bugs por ID único, con alcance de página o proyecto. El usuario selecciona la agrupación y la vista de barras o tabla. Los conteos se calculan sobre los registros actuales; no se copian métricas del archivo original. Los porcentajes expresan la proporción de registros de cada categoría. Las referencias históricas no se cuentan como casos.
 
 Los bloques de QA y sus filas se duplican con nuevos identificadores. La papelera permite recuperar páginas y proyectos. Eliminar una fila desde su tabla requiere confirmación y no tiene recuperación individual en esta versión.

@@ -1,5 +1,16 @@
 export const qaMessages = {
   es: {
+    qaSelectionHelp:
+      'Selecciona casos para cambiar su estado en conjunto. La selección se conserva entre páginas y se limpia al cambiar la búsqueda o el filtro.',
+    qaBulkActions: 'Acciones para casos seleccionados',
+    qaSelectedCount: { one: '{count} caso seleccionado', other: '{count} casos seleccionados' },
+    qaSelectFiltered: 'Seleccionar todos los resultados ({count})',
+    qaBulkStatus: 'Nuevo estado de los casos seleccionados',
+    qaChooseStatus: 'Elegir estado...',
+    qaApplyStatus: { one: 'Aplicar a {count} caso', other: 'Aplicar a {count} casos' },
+    qaClearSelection: 'Limpiar selección',
+    qaSelectPage: 'Seleccionar los casos de esta página',
+    qaSelectRow: 'Seleccionar caso: {name}',
     importProject: 'Importar proyecto',
     importHelp:
       'Selecciona un paquete de Nodo para revisar sus páginas y registros antes de importarlo.',
@@ -68,6 +79,17 @@ export const qaMessages = {
       'Este registro se quitará de la tabla. La papelera recupera páginas y proyectos completos. Puedes cancelar para conservarlo.',
   },
   en: {
+    qaSelectionHelp:
+      'Select cases to change their status together. Selection is kept across pages and cleared when you change the search or filter.',
+    qaBulkActions: 'Selected case actions',
+    qaSelectedCount: { one: '{count} case selected', other: '{count} cases selected' },
+    qaSelectFiltered: 'Select all matching cases ({count})',
+    qaBulkStatus: 'New status for selected cases',
+    qaChooseStatus: 'Choose status...',
+    qaApplyStatus: { one: 'Apply to {count} case', other: 'Apply to {count} cases' },
+    qaClearSelection: 'Clear selection',
+    qaSelectPage: 'Select cases on this page',
+    qaSelectRow: 'Select case: {name}',
     importProject: 'Import project',
     importHelp: 'Choose a Nodo package to review its pages and records before importing.',
     importFile: 'Nodo file (.json)',
