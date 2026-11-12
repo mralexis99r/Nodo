@@ -29,6 +29,7 @@ import { createVerificationMailer } from './mailer.js';
 import { createEmailVerification } from './email-verification.js';
 import { validQACatalogEdits } from '../shared/catalogs.js';
 import { completeReferenceNames } from '../shared/qa.js';
+import { normalizeWorkItemBlocks } from '../shared/work-links.js';
 
 const scrypt = promisify(scryptCallback);
 const now = () => new Date().toISOString();
@@ -41,7 +42,7 @@ const publicUser = ({ id, name, email, avatar, language, theme }) => ({
   language,
   theme,
 });
-const parsePage = (row) => ({ ...row, blocks: JSON.parse(row.blocks) });
+const parsePage = (row) => ({ ...row, blocks: normalizeWorkItemBlocks(JSON.parse(row.blocks)) });
 const sessionDuration = 1000 * 60 * 60 * 24 * 7;
 
 async function passwordHash(password, salt = randomBytes(16).toString('hex')) {

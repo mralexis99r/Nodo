@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { qaStatuses } from '../shared/qa.js';
 import { workAreas, workTypes } from '../shared/catalogs.js';
+import { normalizeWorkItem } from '../shared/work-links.js';
 
 export const icons = [
   'layers',
@@ -96,25 +97,27 @@ export const taskSchema = z.object({
   classification: z.union([z.literal(''), z.enum(workAreas)]).default(''),
   reminderDate: z.union([z.literal(''), z.iso.date()]).default(''),
 });
-export const qaRowSchema = z.object({
-  id: z.uuid(),
-  reference: z.string().max(500).default(''),
-  title: z.string().max(1000).default(''),
-  status: z.union([z.literal(''), z.enum(qaStatuses)]).default('PENDIENTE'),
-  classification: z.string().max(200).default(''),
-  automation: z.string().max(200).default(''),
-  bug: z.string().max(10000).default(''),
-  url: z.union([z.literal(''), safeUrl]).default(''),
-  workItemId: z
-    .string()
-    .regex(/^\d{1,20}$|^$/)
-    .default(''),
-  linkLabel: z.string().max(2000).default(''),
-  note: z.string().max(2000).default(''),
-  history: z.string().max(20000).default(''),
-  module: z.string().max(300).default(''),
-  sourceRow: z.number().int().min(1).optional(),
-});
+export const qaRowSchema = z
+  .object({
+    id: z.uuid(),
+    reference: z.string().max(500).default(''),
+    title: z.string().max(1000).default(''),
+    status: z.union([z.literal(''), z.enum(qaStatuses)]).default('PENDIENTE'),
+    classification: z.string().max(200).default(''),
+    automation: z.string().max(200).default(''),
+    bug: z.string().max(10000).default(''),
+    url: z.union([z.literal(''), safeUrl]).default(''),
+    workItemId: z
+      .string()
+      .regex(/^\d{1,20}$|^$/)
+      .default(''),
+    linkLabel: z.string().max(2000).default(''),
+    note: z.string().max(2000).default(''),
+    history: z.string().max(20000).default(''),
+    module: z.string().max(300).default(''),
+    sourceRow: z.number().int().min(1).optional(),
+  })
+  .transform(normalizeWorkItem);
 export const blockSchema = z.discriminatedUnion('type', [
   z
     .object({

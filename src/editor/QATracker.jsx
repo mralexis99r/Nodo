@@ -5,6 +5,7 @@ import { External, IconButton, Modal } from '../ui';
 import { validUrl } from '../api';
 import CatalogSelect from './CatalogSelect';
 import { catalogLabel, catalogValues } from '../../shared/catalogs';
+import { applyWorkItemPatch, azureWorkItemId } from '../../shared/work-links';
 
 export function QASummary({ summary, t }) {
   return (
@@ -52,7 +53,7 @@ export default function QATracker({ block, onChange, t }) {
       [
         row.reference,
         row.title,
-        row.workItemId,
+        azureWorkItemId(row.url) || row.workItemId,
         row.note,
         row.history,
         row.module,
@@ -96,16 +97,16 @@ export default function QATracker({ block, onChange, t }) {
     onChange({
       rows: block.rows.map((row) =>
         row.id === id
-          ? {
-              ...row,
-              ...(patch.reference !== undefined && !isBug
-                ? referenceNamePatch(row, patch.reference)
-                : {}),
-              ...patch,
-              ...(patch.workItemId !== undefined && block.workItemBase
-                ? { url: patch.workItemId ? `${block.workItemBase}${patch.workItemId}` : '' }
-                : {}),
-            }
+          ? applyWorkItemPatch(
+              row,
+              {
+                ...(patch.reference !== undefined && !isBug
+                  ? referenceNamePatch(row, patch.reference)
+                  : {}),
+                ...patch,
+              },
+              block.workItemBase,
+            )
           : row,
       ),
     });
@@ -290,7 +291,8 @@ export default function QATracker({ block, onChange, t }) {
                 )}
                 <td>
                   <button className="qa-open" onClick={() => setSelected(row.id)}>
-                    {(isBug ? row.workItemId : row.reference) || t('qaMissingReference')}
+                    {(isBug ? azureWorkItemId(row.url) || row.workItemId : row.reference) ||
+                      t('qaMissingReference')}
                   </button>
                 </td>
                 <td>
@@ -333,7 +335,7 @@ export default function QATracker({ block, onChange, t }) {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {row.workItemId || t('open')}
+                      {azureWorkItemId(row.url) || row.workItemId || t('open')}
                     </a>
                   ) : (
                     row.workItemId || '—'
