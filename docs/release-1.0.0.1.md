@@ -16,7 +16,7 @@ Los cinco grupos del progreso son Pendientes, En curso, Bloqueados, Completados 
 
 **Reporte de bugs** es un bloque que puede agregarse a cualquier página y alternar entre esta página y todo el proyecto. Consolida bugs de registros existentes, bugs creados en el reporte y casos fallados con WI relacionado. Permite crear bugs locales y vincular varios casos al mismo bug. Los IDs de Azure se identifican junto con su organización y proyecto para no mezclar incidencias de espacios distintos.
 
-Editar estado, título, comentario o historial desde el reporte actualiza todas las conexiones activas del bug dentro del proyecto, con control de versiones y transacción. Los registros antiguos de bugs también comparten esos cambios. La validación de cada caso es independiente: cerrar el bug no cambia automáticamente un FAIL a PASS. Las referencias históricas y la papelera no forman parte del reporte. Estas conexiones son internas a Nodo; no escriben en Azure DevOps ni Jira.
+Editar estado, título, comentario o historial desde el reporte actualiza todas las conexiones activas del bug dentro del proyecto, con control de versiones y transacción. Los registros antiguos de bugs también comparten esos cambios. La validación de cada caso es independiente: cerrar el bug no cambia automáticamente un FAIL a PASS. Las referencias históricas y la papelera no forman parte del reporte. Un enlace sin estado confirmado se muestra como POR CONFIRMAR. El vínculo se conserva al validar el caso y al duplicar el proyecto. Estas conexiones son internas a Nodo; no escriben en Azure DevOps ni Jira.
 
 ## Nombres por idioma
 

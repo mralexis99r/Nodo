@@ -11,6 +11,7 @@ import { importProjectSchema } from '../schema.js';
 import { bugReport } from '../../shared/bugs.js';
 import { progressDetails } from '../../shared/report-records.js';
 import { translateTitle } from '../title-translation.js';
+import { clonePageBlocks } from '../../shared/clone-pages.js';
 
 const cells = (values) =>
   Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }]));
@@ -231,6 +232,46 @@ test('matrix page import is private and repeatable without resetting edited case
   assert.equal(repeated.page.blocks[1].rows[0].status, 'PASS');
 });
 
+test('an inferred case bug remains linked after the case passes and does not invent an Azure status', async (t) => {
+  const { owner, project } = await setup(t);
+  const created = (
+    await owner
+      .post(`/api/projects/${project.id}/pages`)
+      .set(headers)
+      .send({
+        title: 'Feature',
+        blocks: [
+          {
+            id: randomUUID(),
+            type: 'qa',
+            kind: 'cases',
+            title: 'Cases',
+            rows: [
+              {
+                id: randomUUID(),
+                reference: 'ATC_FT001_Login',
+                title: 'Login',
+                status: 'FAIL',
+                workItemId: '42',
+                url: 'https://dev.azure.com/org/project/_workitems/edit/42',
+              },
+            ],
+          },
+        ],
+      })
+      .expect(201)
+  ).body;
+  const loaded = (await owner.get(`/api/projects/${project.id}`).expect(200)).body.pages.find(
+    (page) => page.id === created.id,
+  );
+  assert.equal(loaded.blocks[0].rows[0].defect.status, 'POR CONFIRMAR');
+  loaded.blocks[0].rows[0].status = 'PASS';
+  await owner.put(`/api/pages/${loaded.id}`).set(headers).send(loaded).expect(200);
+  const report = bugReport((await owner.get(`/api/projects/${project.id}`).expect(200)).body.pages);
+  assert.equal(report.length, 1);
+  assert.equal(report[0].cases[0].status, 'PASS');
+});
+
 test('title translation sends only the name, caches by language and invalidates renamed titles', async (t) => {
   const calls = [];
   const { owner, other, project } = await setup(t, {
@@ -295,4 +336,47 @@ test('translation provider validates results, known names and quota failures wit
     })),
     /TRANSLATION_UNAVAILABLE/,
   );
+});
+
+test('duplicating pages preserves local bug relationships using the copied source IDs', () => {
+  const bugId = randomUUID();
+  const pages = [
+    {
+      id: 'feature',
+      version: 1,
+      blocks: [
+        {
+          id: randomUUID(),
+          type: 'qa',
+          kind: 'cases',
+          rows: [
+            {
+              id: randomUUID(),
+              reference: 'ATC_FT001_Login',
+              title: 'Login',
+              status: 'FAIL',
+              defect: { id: `local:${bugId}`, title: 'Defect', status: 'BUG' },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'overview',
+      version: 1,
+      blocks: [
+        {
+          id: randomUUID(),
+          type: 'bug-report',
+          rows: [{ id: bugId, title: 'Defect', status: 'BUG' }],
+        },
+      ],
+    },
+  ];
+  const copies = clonePageBlocks(pages, randomUUID);
+  const bugs = bugReport(copies);
+  assert.equal(bugs.length, 1);
+  assert.equal(bugs[0].cases.length, 1);
+  assert.notEqual(bugs[0].key, `local:${bugId}`);
+  assert.equal(bugReport(pages)[0].key, `local:${bugId}`);
 });

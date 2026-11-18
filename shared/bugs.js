@@ -77,7 +77,7 @@ export function bugReport(pages, scope = 'project', pageId) {
       const data = isCase ? row.defect || {} : row;
       Object.assign(bug, {
         title: data.title || row.bug || row.title,
-        status: data.status || (isCase ? 'BUG' : row.status) || 'BUG',
+        status: data.status || (isCase ? 'POR CONFIRMAR' : row.status) || 'BUG',
         classification: row.classification || '',
         automation: row.automation || '',
         note: data.note || '',
@@ -128,6 +128,41 @@ export function applyBugUpdate(pages, bug, patch) {
                   },
                 };
               return { ...row, ...patch };
+            }),
+          },
+    ),
+  }));
+}
+
+export function connectedBugPages(pages) {
+  const connections = new Map();
+  for (const bug of bugReport(pages)) {
+    for (const member of bug.members)
+      connections.set(`${member.pageId}/${member.blockId}/${member.rowId}`, bug);
+  }
+  return pages.map((page) => ({
+    ...page,
+    blocks: page.blocks.map((block) =>
+      block.type !== 'qa' || block.kind !== 'cases'
+        ? block
+        : {
+            ...block,
+            rows: block.rows.map((row) => {
+              const bug = connections.get(`${page.id}/${block.id}/${row.id}`);
+              return !bug || row.defect
+                ? row
+                : {
+                    ...row,
+                    defect: {
+                      id: bug.key,
+                      title: bug.title,
+                      status: bug.status,
+                      note: bug.note,
+                      history: bug.history,
+                      url: bug.url,
+                      workItemId: bug.workItemId,
+                    },
+                  };
             }),
           },
     ),

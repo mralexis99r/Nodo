@@ -30,9 +30,10 @@ import { createEmailVerification } from './email-verification.js';
 import { validQACatalogEdits } from '../shared/catalogs.js';
 import { completeReferenceNames } from '../shared/qa.js';
 import { normalizeWorkItemBlocks } from '../shared/work-links.js';
-import { bugReport, applyBugUpdate } from '../shared/bugs.js';
+import { bugReport, applyBugUpdate, connectedBugPages } from '../shared/bugs.js';
 import { qaStatuses } from '../shared/qa.js';
 import { translateTitle } from './title-translation.js';
+import { clonePageBlocks } from '../shared/clone-pages.js';
 
 const scrypt = promisify(scryptCallback);
 const now = () => new Date().toISOString();
@@ -258,13 +259,15 @@ export function createApp({
       )
       .get(id, userId);
   const getPages = async (projectId) =>
-    (
-      await db
-        .prepare(
-          'SELECT * FROM pages WHERE project_id = ? AND deleted_at IS NULL ORDER BY position, created_at',
-        )
-        .all(projectId)
-    ).map(parsePage);
+    connectedBugPages(
+      (
+        await db
+          .prepare(
+            'SELECT * FROM pages WHERE project_id = ? AND deleted_at IS NULL ORDER BY position, created_at',
+          )
+          .all(projectId)
+      ).map(parsePage),
+    );
   const getPage = async (id, userId, includeTrash = false) =>
     await db
       .prepare(
@@ -553,21 +556,11 @@ export function createApp({
         ...project,
         title: `${project.title.slice(0, 110)} (${req.user.language === 'es' ? 'copia' : 'copy'})`,
       });
-      for (const [index, page] of (await getPages(project.id)).entries()) {
-        await insertPage(
-          projectId,
-          {
-            ...page,
-            blocks: page.blocks.map((block) => ({
-              ...block,
-              id: randomUUID(),
-              ...(['table', 'qa', 'bug-report'].includes(block.type)
-                ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
-                : {}),
-            })),
-          },
-          index,
-        );
+      for (const [index, page] of clonePageBlocks(
+        await getPages(project.id),
+        randomUUID,
+      ).entries()) {
+        await insertPage(projectId, page, index);
       }
       return projectId;
     });
@@ -716,7 +709,7 @@ export function createApp({
       }
       await touch(page.project_id);
     });
-    res.json(parsePage(await getPage(page.id, req.user.id)));
+    res.json((await getPages(page.project_id)).find((item) => item.id === page.id));
   });
   app.delete('/api/pages/:id', async (req, res) => {
     const page = await getPage(req.params.id, req.user.id);
@@ -754,13 +747,7 @@ export function createApp({
         ...page,
         title: `${page.title.slice(0, 110)} (${req.user.language === 'es' ? 'copia' : 'copy'})`,
         titleTranslations: {},
-        blocks: page.blocks.map((block) => ({
-          ...block,
-          id: randomUUID(),
-          ...(['table', 'qa', 'bug-report'].includes(block.type)
-            ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
-            : {}),
-        })),
+        blocks: clonePageBlocks([page], randomUUID)[0].blocks,
       },
       position,
     );
