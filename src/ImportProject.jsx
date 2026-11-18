@@ -4,7 +4,7 @@ import { ErrorMessage, Modal } from './ui';
 import { importProjectSchema } from '../server/schema';
 import { summarizeQA } from '../shared/qa';
 
-export default function ImportProject({ t, onClose, onImported }) {
+export default function ImportProject({ t, projectId, onClose, onImported }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -15,23 +15,33 @@ export default function ImportProject({ t, onClose, onImported }) {
     setInTrash(false);
     const file = event.target.files[0];
     if (!file) return;
-    if (file.size > 1000000) {
+    if (file.size > (file.name.toLowerCase().endswith('.xlsx') ? 5000000 : 1000000)) {
       setError('CONTENT_TOO_LARGE');
       return;
     }
     try {
-      setData(importProjectSchema.parse(JSON.parse(await file.text())));
-    } catch {
-      setError('INVALID_IMPORT');
+      const raw = file.name.toLowerCase().endsWith('.xlsx')
+        ? await (await import('./xlsx')).importXlsx(file)
+        : JSON.parse(await file.text());
+      setData(importProjectSchema.parse(raw));
+    } catch (err) {
+      setError(
+        ['INVALID_MATRIX', 'CONTENT_TOO_LARGE', 'DUPLICATE_MATRIX_CASE'].includes(err.message)
+          ? err.message
+          : 'INVALID_IMPORT',
+      );
     }
   }
   async function submit() {
     setBusy(true);
     setError('');
     try {
-      const result = await api('/projects/import', { method: 'POST', body: data });
+      const result = await api(
+        projectId ? `/projects/${projectId}/import-cases` : '/projects/import',
+        { method: 'POST', body: projectId ? data.pages[0] : data },
+      );
       if (result.inTrash) setInTrash(true);
-      else await onImported(result.id);
+      else await onImported(projectId ? result.page.id : result.id);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,14 +50,18 @@ export default function ImportProject({ t, onClose, onImported }) {
   }
   const summary = data && summarizeQA(data.pages);
   return (
-    <Modal title={t('importProject')} t={t} onClose={busy ? () => {} : onClose}>
+    <Modal
+      title={t(projectId ? 'importCases' : 'importProject')}
+      t={t}
+      onClose={busy ? () => {} : onClose}
+    >
       <div className="qa-import">
         <p>{t('importHelp')}</p>
         <label>
           <span>{t('importFile')}</span>
           <input
             type="file"
-            accept=".json,application/json"
+            accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             disabled={busy}
             onChange={selectFile}
           />
@@ -89,7 +103,7 @@ export default function ImportProject({ t, onClose, onImported }) {
                 </ul>
               </details>
             )}
-            <p>{t('importPrivacy')}</p>
+            <p>{t(projectId ? 'importCasesPrivacy' : 'importPrivacy')}</p>
           </>
         )}
         <div className="modal-actions">
@@ -97,7 +111,7 @@ export default function ImportProject({ t, onClose, onImported }) {
             {t('cancel')}
           </button>
           <button className="button primary" disabled={!data || busy || inTrash} onClick={submit}>
-            {t(busy ? 'saving' : 'importConfirm')}
+            {t(busy ? 'saving' : projectId ? 'importCases' : 'importConfirm')}
           </button>
         </div>
       </div>

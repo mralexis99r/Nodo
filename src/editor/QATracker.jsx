@@ -5,6 +5,7 @@ import { External, IconButton, Modal } from '../ui';
 import { validUrl } from '../api';
 import CatalogSelect from './CatalogSelect';
 import { catalogLabel, catalogValues } from '../../shared/catalogs';
+import { bugReport, externalBugKey } from '../../shared/bugs';
 import { applyWorkItemPatch, azureWorkItemId } from '../../shared/work-links';
 
 export function QASummary({ summary, t }) {
@@ -36,7 +37,7 @@ export function QASummary({ summary, t }) {
   );
 }
 
-export default function QATracker({ block, onChange, t }) {
+export default function QATracker({ block, pages: projectPages = [], onChange, t }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
@@ -45,6 +46,7 @@ export default function QATracker({ block, onChange, t }) {
   const [checkedIds, setCheckedIds] = useState([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkField, setBulkField] = useState('status');
+  const availableBugs = bugReport(projectPages);
   const isBug = block.kind !== 'cases';
   const pageSize = 10;
   const rows = block.rows.filter(
@@ -111,6 +113,11 @@ export default function QATracker({ block, onChange, t }) {
       ),
     });
   const current = block.rows.find((row) => row.id === selected);
+  const relatedBug =
+    current &&
+    availableBugs.find((bug) =>
+      bug.members.some((member) => member.rowId === current.id && member.blockId === block.id),
+    );
   function add() {
     const id = crypto.randomUUID();
     onChange({
@@ -461,6 +468,158 @@ export default function QATracker({ block, onChange, t }) {
                 />
               </label>
             ))}
+            {!isBug && (
+              <>
+                {[
+                  'description',
+                  'prerequisites',
+                  'testData',
+                  'requirement',
+                  'useCase',
+                  'testType',
+                  'sourcePriority',
+                ].map((field) => (
+                  <label key={field}>
+                    <span>{t(`caseFields.${field}`)}</span>
+                    <textarea
+                      rows={3}
+                      maxLength={
+                        ['testType', 'sourcePriority'].includes(field)
+                          ? 200
+                          : ['requirement', 'useCase'].includes(field)
+                            ? 2000
+                            : 20000
+                      }
+                      value={current[field] || ''}
+                      onChange={(e) => update(current.id, { [field]: e.target.value })}
+                    />
+                  </label>
+                ))}
+                {current.sourceReference && (
+                  <p className="qa-provenance">
+                    {t('originalReference')}: {current.sourceReference}
+                    <br />
+                    {current.originalTitle}
+                  </p>
+                )}
+                <h3>{t('caseSteps')}</h3>
+                {(current.steps || []).map((step, index) => (
+                  <fieldset className="case-step" key={index}>
+                    <legend>
+                      {t('caseStep')} {step.number}
+                    </legend>
+                    <label>
+                      {t('caseAction')}
+                      <textarea
+                        rows={3}
+                        maxLength={20000}
+                        value={step.action}
+                        onChange={(e) =>
+                          update(current.id, {
+                            steps: current.steps.map((item, i) =>
+                              i === index ? { ...item, action: e.target.value } : item,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      {t('caseExpected')}
+                      <textarea
+                        rows={3}
+                        maxLength={20000}
+                        value={step.expected}
+                        onChange={(e) =>
+                          update(current.id, {
+                            steps: current.steps.map((item, i) =>
+                              i === index ? { ...item, expected: e.target.value } : item,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                  </fieldset>
+                ))}
+                <button
+                  className="button secondary"
+                  disabled={(current.steps?.length || 0) >= 200}
+                  onClick={() =>
+                    update(current.id, {
+                      steps: [
+                        ...(current.steps || []),
+                        {
+                          number: String((current.steps?.length || 0) + 1),
+                          action: '',
+                          expected: '',
+                        },
+                      ],
+                    })
+                  }
+                >
+                  {t('addStep')}
+                </button>
+                <label>
+                  {t('relatedBug')}
+                  <select
+                    aria-label={t('relatedBug')}
+                    value={current.defect?.id || relatedBug?.key || ''}
+                    onChange={(e) => {
+                      const bug = availableBugs.find((item) => item.key === e.target.value);
+                      if (bug)
+                        update(current.id, {
+                          defect: {
+                            id: bug.key,
+                            url: bug.url,
+                            workItemId: bug.workItemId,
+                            title: bug.title,
+                            status: bug.status,
+                            note: bug.note,
+                            history: bug.history,
+                          },
+                        });
+                    }}
+                  >
+                    <option value="">{t('chooseBug')}</option>
+                    {availableBugs.map((bug) => (
+                      <option key={bug.key} value={bug.key}>
+                        {bug.workItemId || ''} {bug.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {current.defect || relatedBug ? (
+                  <p>
+                    {(relatedBug || current.defect).title} / {(relatedBug || current.defect).status}
+                    <br />
+                    {(relatedBug || current.defect).note}
+                  </p>
+                ) : (
+                  <button
+                    className="button secondary"
+                    onClick={() =>
+                      update(current.id, {
+                        defect: {
+                          id:
+                            externalBugKey(current) ||
+                            (current.workItemId
+                              ? `wi:${current.workItemId}`
+                              : `local:${crypto.randomUUID()}`),
+                          url: current.url || '',
+                          workItemId: current.workItemId || '',
+                          title: current.bug || current.title || current.reference,
+                          status: 'BUG',
+                          note: '',
+                          history: '',
+                        },
+                      })
+                    }
+                  >
+                    {t('createRelatedBug')}
+                  </button>
+                )}
+                <p className="qa-provenance">{t('bugUpdateHelp')}</p>
+              </>
+            )}
             <p className="qa-provenance">{t('qaManualState')}</p>
             <button className="button primary" onClick={() => setSelected(null)}>
               {t('close')}

@@ -116,9 +116,50 @@ export const qaRowSchema = z
     history: z.string().max(20000).default(''),
     module: z.string().max(300).default(''),
     sourceRow: z.number().int().min(1).optional(),
+    sourceReference: z.string().max(500).default(''),
+    originalTitle: z.string().max(2000).default(''),
+    description: z.string().max(20000).default(''),
+    prerequisites: z.string().max(20000).default(''),
+    testData: z.string().max(20000).default(''),
+    requirement: z.string().max(2000).default(''),
+    useCase: z.string().max(2000).default(''),
+    testType: z.string().max(200).default(''),
+    sourceStatus: z.string().max(200).default(''),
+    sourcePriority: z.string().max(200).default(''),
+    steps: z
+      .array(
+        z.object({
+          number: z.string().max(40),
+          action: z.string().max(20000),
+          expected: z.string().max(20000),
+        }),
+      )
+      .max(200)
+      .default([]),
+    defect: z
+      .object({
+        id: z.string().min(1).max(500),
+        url: z.union([z.literal(''), safeUrl]).default(''),
+        workItemId: z
+          .string()
+          .regex(/^\d{1,20}$|^$/)
+          .default(''),
+        title: z.string().max(1000),
+        status: z.enum(qaStatuses),
+        note: z.string().max(2000).default(''),
+        history: z.string().max(20000).default(''),
+      })
+      .optional(),
   })
   .transform(normalizeWorkItem);
 export const blockSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.uuid(),
+    type: z.literal('bug-report'),
+    title: z.string().max(120),
+    scope: z.enum(['page', 'project']).default('page'),
+    rows: z.array(qaRowSchema).max(500).default([]),
+  }),
   z
     .object({
       id: z.uuid(),
@@ -188,6 +229,7 @@ export const projectSchema = z.object({
 });
 export const pageSchema = z.object({
   title: z.string().trim().min(1).max(120),
+  titleLanguage: z.enum(['es', 'en']).optional(),
   icon: z.enum(icons).default('file'),
   status: z.enum(statuses).default('todo'),
   blocks: z.array(blockSchema).max(100).default([]),

@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 // Import application content only. Sessions and pending codes never leave the source database.
 export async function importSQLite(source, destination) {
   const version = source.prepare('PRAGMA user_version').get().user_version;
-  if (version > 2) throw new Error('UNSUPPORTED_SQLITE_VERSION');
+  if (version > 3) throw new Error('UNSUPPORTED_SQLITE_VERSION');
   let users, projects, pages;
   source.exec('BEGIN');
   try {
@@ -59,8 +59,8 @@ export async function importSQLite(source, destination) {
       await destination
         .prepare(
           `INSERT INTO pages
-      (id, project_id, title, icon, status, blocks, position, version, deleted_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, project_id, title, icon, status, blocks, position, version, deleted_at, created_at, updated_at, title_language, title_translations)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           page.id,
@@ -74,6 +74,8 @@ export async function importSQLite(source, destination) {
           page.deleted_at,
           page.created_at,
           page.updated_at,
+          page.title_language || 'es',
+          page.title_translations || '{}',
         );
     return { users: users.length, projects: projects.length, pages: pages.length };
   });

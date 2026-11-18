@@ -50,6 +50,13 @@ export function openDatabase(filename) {
       `);
     });
   }
+  if (version < 3) {
+    transaction(db, () => {
+      db.exec(`ALTER TABLE pages ADD COLUMN title_language TEXT NOT NULL DEFAULT 'es';
+        ALTER TABLE pages ADD COLUMN title_translations TEXT NOT NULL DEFAULT '{}';
+        PRAGMA user_version = 3;`);
+    });
+  }
   return db;
 }
 

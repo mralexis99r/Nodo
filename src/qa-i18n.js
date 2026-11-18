@@ -13,8 +13,8 @@ export const qaMessages = {
     qaSelectRow: 'Seleccionar caso: {name}',
     importProject: 'Importar proyecto',
     importHelp:
-      'Selecciona un paquete de Nodo para revisar sus páginas y registros antes de importarlo.',
-    importFile: 'Archivo de Nodo (.json)',
+      'Selecciona un paquete de Nodo o una matriz Excel con la pestaña de casos de prueba. Revisa los registros antes de importar.',
+    importFile: 'Archivo de Nodo o matriz de pruebas (.json, .xlsx)',
     importConfirm: 'Importar a mi espacio',
     importWarnings: 'Observaciones de la migración',
     importPrivacy:
@@ -91,8 +91,9 @@ export const qaMessages = {
     qaSelectPage: 'Select cases on this page',
     qaSelectRow: 'Select case: {name}',
     importProject: 'Import project',
-    importHelp: 'Choose a Nodo package to review its pages and records before importing.',
-    importFile: 'Nodo file (.json)',
+    importHelp:
+      'Choose a Nodo package or an Excel test matrix. Review its records before importing.',
+    importFile: 'Nodo package or test matrix (.json, .xlsx)',
     importConfirm: 'Import to my workspace',
     importWarnings: 'Migration notes',
     importPrivacy:

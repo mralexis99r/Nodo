@@ -3040,3 +3040,75 @@ kbd {
   font-size: 11px;
   margin: 18px 0 0;
 }
+
+.report-clickable {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.report-clickable > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  text-align: left;
+  padding: 8px;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.report-clickable > button:hover {
+  background: var(--hover);
+}
+.report-clickable > button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.report-record-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+.report-record-list article {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  overflow-wrap: anywhere;
+}
+.report-record-list article > * {
+  margin: 5px 0;
+}
+.report-record-list article > button,
+.report-record-list article > a {
+  display: block;
+  text-align: left;
+}
+.report-record-list p {
+  color: var(--muted);
+  font-size: 12px;
+}
+.bug-report {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px;
+}
+.qa-bug-label {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.case-step {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.case-step legend {
+  color: var(--muted);
+  padding: 0 5px;
+}
+.import-cases-button {
+  margin-bottom: 12px;
+}
+@media (max-width: 640px) {
+  .report-clickable {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

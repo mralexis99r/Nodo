@@ -1,3 +1,4 @@
+import { nodoRelease } from '../package.json';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
@@ -475,7 +476,7 @@ export default function App() {
           )}
         </main>
         <footer className="app-footer">
-          <span>Nodo</span>
+          <span>Nodo {nodoRelease}</span>
           <span>{t('community')}</span>
         </footer>
       </div>

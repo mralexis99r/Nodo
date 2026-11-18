@@ -1,7 +1,9 @@
+import { releaseMessages } from './release-i18n.js';
 import { qaMessages } from './qa-i18n.js';
 import { catalogMessages } from './catalog-i18n.js';
 export const messages = {
   es: {
+    ...releaseMessages.es,
     ...qaMessages.es,
     ...catalogMessages.es,
     emailConfirmation: 'Confirmar correo electrónico',
@@ -234,6 +236,9 @@ export const messages = {
     confirmLogout: 'Cerrar sesión',
     linkRequired: 'Pega el enlace de Jira, Azure DevOps, Figma u otro recurso.',
     errors: {
+      INVALID_MATRIX: 'Selecciona una matriz con Id Caso de Prueba, pasos y resultados esperados.',
+      DUPLICATE_MATRIX_CASE:
+        'La matriz tiene identificadores de casos duplicados. Corrígelos antes de importar.',
       INVALID_CATALOG_VALUE:
         'Elige una opción del catálogo para clasificación o automatización. Los valores originales se conservan hasta que decidas cambiarlos.',
       INVALID_IMPORT:
@@ -269,6 +274,7 @@ export const messages = {
     },
   },
   en: {
+    ...releaseMessages.en,
     ...qaMessages.en,
     ...catalogMessages.en,
     emailConfirmation: 'Confirm email address',
@@ -499,6 +505,8 @@ export const messages = {
     confirmLogout: 'Sign out',
     linkRequired: 'Paste a Jira, Azure DevOps, Figma, or another resource link.',
     errors: {
+      INVALID_MATRIX: 'Choose a matrix with test case IDs, steps and expected results.',
+      DUPLICATE_MATRIX_CASE: 'The matrix contains duplicate case IDs. Fix them before importing.',
       EMAIL_MISMATCH: 'Both email addresses must match.',
       INVALID_CATALOG_VALUE:
         'Choose a catalog option for classification or automation. Original values are kept until you decide to change them.',

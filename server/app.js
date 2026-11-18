@@ -30,6 +30,9 @@ import { createEmailVerification } from './email-verification.js';
 import { validQACatalogEdits } from '../shared/catalogs.js';
 import { completeReferenceNames } from '../shared/qa.js';
 import { normalizeWorkItemBlocks } from '../shared/work-links.js';
+import { bugReport, applyBugUpdate } from '../shared/bugs.js';
+import { qaStatuses } from '../shared/qa.js';
+import { translateTitle } from './title-translation.js';
 
 const scrypt = promisify(scryptCallback);
 const now = () => new Date().toISOString();
@@ -42,7 +45,12 @@ const publicUser = ({ id, name, email, avatar, language, theme }) => ({
   language,
   theme,
 });
-const parsePage = (row) => ({ ...row, blocks: normalizeWorkItemBlocks(JSON.parse(row.blocks)) });
+const parsePage = (row) => ({
+  ...row,
+  titleLanguage: row.title_language || 'es',
+  titleTranslations: JSON.parse(row.title_translations || '{}'),
+  blocks: normalizeWorkItemBlocks(JSON.parse(row.blocks)),
+});
 const sessionDuration = 1000 * 60 * 60 * 24 * 7;
 
 async function passwordHash(password, salt = randomBytes(16).toString('hex')) {
@@ -64,6 +72,11 @@ export function createApp({
   mailer = createVerificationMailer(),
   verificationSecret = process.env.EMAIL_CODE_SECRET,
   clock = Date.now,
+  titleTranslator = process.env.TITLE_TRANSLATION_PROVIDER === 'mymemory'
+    ? translateTitle
+    : async () => {
+        throw new Error('TRANSLATION_UNAVAILABLE');
+      },
 } = {}) {
   const app = express();
   const selected = storage || createStorage({ databaseUrl, databasePath, production });
@@ -260,12 +273,58 @@ export function createApp({
       .get(id, userId);
   const touch = async (id) =>
     await db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
+  async function saveBugMembers(projectId, pages, bug, patch) {
+    const changed = applyBugUpdate(pages, bug, patch);
+    for (const page of changed) {
+      const original = pages.find((item) => item.id === page.id);
+      if (JSON.stringify(page.blocks) === JSON.stringify(original.blocks)) continue;
+      const result = await db
+        .prepare(
+          'UPDATE pages SET blocks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?',
+        )
+        .run(JSON.stringify(page.blocks), now(), page.id, page.version);
+      if (!result.changes) throw Object.assign(new Error('VERSION_CONFLICT'), { status: 409 });
+    }
+    await touch(projectId);
+  }
+  app.put('/api/projects/:id/bugs', async (req, res) => {
+    if (!(await getProject(req.params.id, req.user.id)))
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    const input = z
+      .object({
+        key: z.string().min(1).max(500),
+        revision: z.string().max(200000),
+        title: z.string().trim().min(1).max(1000),
+        status: z.enum(qaStatuses),
+        note: z.string().max(2000),
+        history: z.string().max(20000),
+      })
+      .parse(req.body);
+    await db.transaction(async () => {
+      await db.lockUser(req.user.id);
+      const pages = await getPages(req.params.id);
+      const bug = bugReport(pages).find((item) => item.key === input.key);
+      if (!bug) throw Object.assign(new Error('NOT_FOUND'), { status: 404 });
+      if (bug.revision !== input.revision)
+        throw Object.assign(new Error('VERSION_CONFLICT'), { status: 409 });
+      await saveBugMembers(req.params.id, pages, bug, {
+        title: input.title,
+        status: input.status,
+        note: input.note,
+        history: input.history,
+      });
+    });
+    res.json({
+      ...(await getProject(req.params.id, req.user.id)),
+      pages: await getPages(req.params.id),
+    });
+  });
   async function insertPage(projectId, input, position = 0) {
     const id = randomUUID(),
       date = now();
     await db
       .prepare(
-        'INSERT INTO pages (id, project_id, title, icon, status, blocks, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pages (id, project_id, title, icon, status, blocks, position, created_at, updated_at, title_language, title_translations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         id,
@@ -277,6 +336,8 @@ export function createApp({
         position,
         date,
         date,
+        input.titleLanguage || input.title_language || 'es',
+        JSON.stringify(input.titleTranslations || {}),
       );
     return parsePage(await db.prepare('SELECT * FROM pages WHERE id = ?').get(id));
   }
@@ -387,7 +448,11 @@ export function createApp({
     const id = await db.transaction(async () => {
       const projectId = await insertProject(req.user.id, projectSchema.parse(sample));
       for (const [index, page] of sample.pages.entries())
-        await insertPage(projectId, pageSchema.parse(page), index);
+        await insertPage(
+          projectId,
+          pageSchema.parse({ ...page, titleLanguage: req.user.language }),
+          index,
+        );
       return projectId;
     });
     res.status(201).json({ id });
@@ -409,7 +474,7 @@ export function createApp({
             blocks: page.blocks.map((block) => ({
               ...block,
               id: randomUUID(),
-              ...(['table', 'qa'].includes(block.type)
+              ...(['table', 'qa', 'bug-report'].includes(block.type)
                 ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
                 : {}),
             })),
@@ -496,7 +561,7 @@ export function createApp({
             blocks: page.blocks.map((block) => ({
               ...block,
               id: randomUUID(),
-              ...(['table', 'qa'].includes(block.type)
+              ...(['table', 'qa', 'bug-report'].includes(block.type)
                 ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
                 : {}),
             })),
@@ -512,6 +577,7 @@ export function createApp({
     if (!(await getProject(req.params.id, req.user.id)))
       return res.status(404).json({ error: 'NOT_FOUND' });
     const input = pageSchema.parse(req.body);
+    input.titleLanguage ||= req.user.language;
     input.blocks = completeReferenceNames(input.blocks);
     if (!validQACatalogEdits(input.blocks))
       return res.status(400).json({ error: 'INVALID_CATALOG_VALUE' });
@@ -526,6 +592,73 @@ export function createApp({
     await touch(req.params.id);
     res.status(201).json(page);
   });
+  app.post('/api/projects/:id/import-cases', async (req, res) => {
+    if (!(await getProject(req.params.id, req.user.id)))
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    const input = pageSchema.parse(req.body);
+    if (!input.blocks.some((block) => block.type === 'qa' && block.kind === 'cases'))
+      return res.status(400).json({ error: 'INVALID_IMPORT' });
+    const result = await db.transaction(async () => {
+      await db.lockUser(req.user.id);
+      const pages = await getPages(req.params.id);
+      const caseIds = new Set(
+        input.blocks
+          .filter((block) => block.type === 'qa' && block.kind === 'cases')
+          .flatMap((block) => block.rows.map((row) => row.id)),
+      );
+      const existing = pages.find((page) =>
+        page.blocks.some((block) => block.rows?.some((row) => caseIds.has(row.id))),
+      );
+      if (existing) return { page: existing, existing: true };
+      const position = (
+        await db
+          .prepare(
+            'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM pages WHERE project_id = ?',
+          )
+          .get(req.params.id)
+      ).position;
+      const page = await insertPage(req.params.id, input, position);
+      await touch(req.params.id);
+      return { page, existing: false };
+    });
+    res.status(result.existing ? 200 : 201).json(result);
+  });
+  const translationLimiter = rateLimit({
+    windowMs: 3600000,
+    limit: 60,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'TOO_MANY_ATTEMPTS' },
+  });
+  app.post('/api/projects/:id/translate-titles', translationLimiter, async (req, res) => {
+    if (!(await getProject(req.params.id, req.user.id)))
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    const { language } = z.object({ language: z.enum(['es', 'en']) }).parse(req.body);
+    const pages = await getPages(req.params.id);
+    const failures = [];
+    for (const page of pages) {
+      if (page.titleLanguage === language || page.titleTranslations[language]) continue;
+      try {
+        const translated = await titleTranslator(page.title, page.titleLanguage, language);
+        const fresh = await getPage(page.id, req.user.id);
+        if (!fresh || fresh.title !== page.title) continue;
+        const translations = { ...JSON.parse(fresh.title_translations), [language]: translated };
+        await db
+          .prepare('UPDATE pages SET title_translations = ? WHERE id = ? AND title = ?')
+          .run(JSON.stringify(translations), page.id, page.title);
+      } catch {
+        failures.push(page.id);
+      }
+    }
+    res.json({
+      pages: (await getPages(req.params.id)).map(({ id, title, titleTranslations }) => ({
+        id,
+        title,
+        titleTranslations,
+      })),
+      failures,
+    });
+  });
   app.put('/api/pages/:id', async (req, res) => {
     const page = await getPage(req.params.id, req.user.id);
     if (!page) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -533,21 +666,56 @@ export function createApp({
     input.blocks = completeReferenceNames(input.blocks, JSON.parse(page.blocks));
     if (!validQACatalogEdits(input.blocks, JSON.parse(page.blocks)))
       return res.status(400).json({ error: 'INVALID_CATALOG_VALUE' });
-    const result = await db
-      .prepare(
-        'UPDATE pages SET title = ?, icon = ?, status = ?, blocks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?',
-      )
-      .run(
-        input.title,
-        input.icon,
-        input.status,
-        JSON.stringify(input.blocks),
-        now(),
-        page.id,
-        input.version,
-      );
-    if (!result.changes) return res.status(409).json({ error: 'VERSION_CONFLICT' });
-    await touch(page.project_id);
+    await db.transaction(async () => {
+      await db.lockUser(req.user.id);
+      const pages = await getPages(page.project_id);
+      const oldBugs = bugReport(pages);
+      const renamed = input.title !== page.title;
+      const result = await db
+        .prepare(
+          'UPDATE pages SET title = ?, title_language = ?, title_translations = ?, icon = ?, status = ?, blocks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?',
+        )
+        .run(
+          input.title,
+          renamed ? input.titleLanguage || req.user.language : page.title_language,
+          renamed ? '{}' : page.title_translations,
+          input.icon,
+          input.status,
+          JSON.stringify(input.blocks),
+          now(),
+          page.id,
+          input.version,
+        );
+      if (!result.changes) throw Object.assign(new Error('VERSION_CONFLICT'), { status: 409 });
+      for (const block of input.blocks.filter(
+        (b) => b.type === 'bug-report' || (b.type === 'qa' && b.kind === 'bugs'),
+      )) {
+        for (const row of block.rows) {
+          const old = pages
+            .find((p) => p.id === page.id)
+            ?.blocks.find((b) => b.id === block.id)
+            ?.rows?.find((r) => r.id === row.id);
+          if (
+            !old ||
+            ['title', 'status', 'note', 'history'].every((field) => row[field] === old[field])
+          )
+            continue;
+          const bug = oldBugs.find((b) =>
+            b.members.some(
+              (m) => m.rowId === row.id && m.pageId === page.id && m.blockId === block.id,
+            ),
+          );
+          if (bug)
+            await saveBugMembers(page.project_id, await getPages(page.project_id), bug, {
+              title: row.title,
+              status: row.status || 'BUG',
+              note: row.note,
+              history: row.history,
+            });
+        }
+      }
+      await touch(page.project_id);
+    });
     res.json(parsePage(await getPage(page.id, req.user.id)));
   });
   app.delete('/api/pages/:id', async (req, res) => {
@@ -585,10 +753,11 @@ export function createApp({
       {
         ...page,
         title: `${page.title.slice(0, 110)} (${req.user.language === 'es' ? 'copia' : 'copy'})`,
+        titleTranslations: {},
         blocks: page.blocks.map((block) => ({
           ...block,
           id: randomUUID(),
-          ...(['table', 'qa'].includes(block.type)
+          ...(['table', 'qa', 'bug-report'].includes(block.type)
             ? { rows: block.rows.map((row) => ({ ...row, id: randomUUID() })) }
             : {}),
         })),
@@ -617,6 +786,8 @@ export function createApp({
         'VERIFICATION_INVALID',
         'VERIFICATION_EXPIRED',
         'VERIFICATION_ATTEMPTS_EXCEEDED',
+        'VERSION_CONFLICT',
+        'NOT_FOUND',
       ].includes(error.message)
     )
       return res.status(error.status).json({ error: error.message, ...error.details });

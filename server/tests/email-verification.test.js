@@ -298,7 +298,7 @@ test('version 1 migration preserves projects but invalidates old sessions and re
   try {
     app = createTestApp({ databasePath: filename });
     const db = app.locals.db;
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 3);
     assert.equal(db.prepare('SELECT email_verified_at FROM users').get().email_verified_at, null);
     assert.equal(db.prepare('SELECT count(*) AS total FROM sessions').get().total, 0);
     assert.equal(db.prepare('SELECT title FROM projects').get().title, 'Preserved');

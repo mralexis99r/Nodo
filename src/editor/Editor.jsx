@@ -35,12 +35,18 @@ import { workUnits } from '../../shared/qa';
 import { progressReport, progressScope } from '../../shared/progress';
 import CatalogSelect from './CatalogSelect';
 import RecordReport from './RecordReport';
+import BugReport from './BugReport';
+import ProgressDetails from './ProgressDetails';
+import { pageTitle } from '../../shared/page-title';
 
 const uuid = () => crypto.randomUUID();
 const blankDocument = () => ({ type: 'doc', content: [{ type: 'paragraph' }] });
 
 export default function Editor({
   projectPages,
+  locale,
+  onNavigate,
+  onUpdateBug,
   initial,
   t,
   summary,
@@ -79,6 +85,7 @@ export default function Editor({
           method: 'PUT',
           body: {
             title: snapshot.title,
+            titleLanguage: snapshot.titleLanguage,
             icon: snapshot.icon,
             status: snapshot.status,
             blocks: snapshot.blocks,
@@ -87,6 +94,11 @@ export default function Editor({
         });
         versionRef.current = saved.version;
         savedRef.current = snapshot;
+        if (draftRef.current === snapshot) {
+          draftRef.current = saved;
+          savedRef.current = saved;
+          if (mounted.current) setDraft(saved);
+        }
         if (mounted.current) callbackRef.current(saved);
       }
       if (mounted.current) {
@@ -161,20 +173,22 @@ export default function Editor({
                 kind: development ? 'development' : 'tasks',
                 rows: [],
               }
-            : type === 'record-report'
-              ? {
-                  title: t('recordReportTitle'),
-                  dataset: summary.qa && summary.qa.total === summary.tasks ? 'cases' : 'tasks',
-                  field: 'status',
-                  scope: progressScope({}, draft),
-                  view: 'bars',
-                }
-              : {
-                  title: t(
-                    progressScope({}, draft) === 'page' ? 'pageProgressTitle' : 'reportTitle',
-                  ),
-                  scope: progressScope({}, draft),
-                }),
+            : type === 'bug-report'
+              ? { title: t('bugReport'), scope: progressScope({}, draft), rows: [] }
+              : type === 'record-report'
+                ? {
+                    title: t('recordReportTitle'),
+                    dataset: summary.qa && summary.qa.total === summary.tasks ? 'cases' : 'tasks',
+                    field: 'status',
+                    scope: progressScope({}, draft),
+                    view: 'bars',
+                  }
+                : {
+                    title: t(
+                      progressScope({}, draft) === 'page' ? 'pageProgressTitle' : 'reportTitle',
+                    ),
+                    scope: progressScope({}, draft),
+                  }),
     };
     change((current) => ({ ...current, blocks: [...current.blocks, block] }));
   }
@@ -191,7 +205,7 @@ export default function Editor({
         blocks.splice(index + 1, 0, {
           ...structuredClone(block),
           id: uuid(),
-          ...(['table', 'qa'].includes(block.type)
+          ...(['table', 'qa', 'bug-report'].includes(block.type)
             ? { rows: block.rows.map((row) => ({ ...row, id: uuid() })) }
             : {}),
         });
@@ -262,8 +276,21 @@ export default function Editor({
           aria-label={t('pageName')}
           placeholder={t('pageName')}
           maxLength={120}
-          value={draft.title}
-          onChange={(event) => change((current) => ({ ...current, title: event.target.value }))}
+          value={pageTitle(
+            {
+              ...draft,
+              titleTranslations: draft.title === initial.title ? initial.titleTranslations : {},
+            },
+            locale,
+          )}
+          onChange={(event) =>
+            change((current) => ({
+              ...current,
+              title: event.target.value,
+              titleLanguage: locale,
+              titleTranslations: {},
+            }))
+          }
         />
       </div>
       <div className="page-status-row">
@@ -331,15 +358,34 @@ export default function Editor({
                 <TaskTable block={block} onChange={(patch) => updateBlock(block.id, patch)} t={t} />
               )}
               {block.type === 'qa' && (
-                <QATracker block={block} onChange={(patch) => updateBlock(block.id, patch)} t={t} />
+                <QATracker
+                  block={block}
+                  pages={projectPages.map((page) => (page.id === draft.id ? draft : page))}
+                  onChange={(patch) => updateBlock(block.id, patch)}
+                  t={t}
+                />
               )}
               {block.type === 'report' && (
                 <Report
                   block={block}
                   summary={progressReport(block, projectPages, draft)}
+                  pages={projectPages}
+                  currentPage={draft}
+                  onNavigate={onNavigate}
                   color={color}
                   t={t}
                   onChange={(patch) => updateBlock(block.id, patch)}
+                />
+              )}
+              {block.type === 'bug-report' && (
+                <BugReport
+                  block={block}
+                  pages={projectPages.map((page) => (page.id === draft.id ? draft : page))}
+                  currentPage={draft}
+                  t={t}
+                  onChange={(patch) => updateBlock(block.id, patch)}
+                  onUpdateBug={onUpdateBug}
+                  onNavigate={onNavigate}
                 />
               )}
               {block.type === 'record-report' && (
@@ -368,6 +414,7 @@ export default function Editor({
           [Table2, 'qa-bugs', 'qaBugRegister'],
           [BarChart3, 'report', 'reportBlock'],
           [BarChart3, 'record-report', 'recordReportTitle'],
+          [BarChart3, 'bug-report', 'bugReport'],
           [Link2, 'link', 'linkBlock'],
         ].map(([Component, type, label]) => (
           <button key={type} onClick={() => addBlock(type)}>
@@ -636,7 +683,7 @@ function TaskUrl({ url, onChange, t }) {
     </div>
   );
 }
-function Report({ block, summary, color, t, onChange }) {
+function Report({ block, summary, color, t, onChange, pages, currentPage, onNavigate }) {
   return (
     <div className={`report-block tint-${color}`}>
       <div className="block-heading">
@@ -671,15 +718,14 @@ function Report({ block, summary, color, t, onChange }) {
         </div>
         <Progress value={summary.progress} color={color} />
       </div>
-      <div className="report-counts">
-        {Object.keys(statusKeys).map((value) => (
-          <div key={value}>
-            <span className={`report-dot status-${value}`} />
-            <strong>{summary.counts[value]}</strong>
-            <span>{t(statusKeys[value])}</span>
-          </div>
-        ))}
-      </div>
+      <ProgressDetails
+        block={block}
+        pages={pages}
+        currentPage={currentPage}
+        scope={summary.scope}
+        t={t}
+        onNavigate={onNavigate}
+      />
       <p>{t(summary.scope === 'page' ? 'autoPageReport' : 'autoReport')}</p>
     </div>
   );

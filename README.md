@@ -121,6 +121,10 @@ docs/
 
 Los identificadores del código están en inglés; los archivos usan UTF-8 y los textos de interfaz están centralizados. Consulta [la arquitectura](docs/architecture.md) y [el roadmap](docs/roadmap.md) para continuar el proyecto.
 
+## Versión 1.0.0.1
+
+Importación de matrices Excel con pasos y resultados esperados, detalle al pulsar los grupos de progreso, reporte de bugs conectado por página o proyecto y nombres de páginas en español e inglés. Consulta [las notas de versión](docs/release-1.0.0.1.md).
+
 ## Contribuir
 
 Consulta [CONTRIBUTING.md](CONTRIBUTING.md). Licencia [MIT](LICENSE).

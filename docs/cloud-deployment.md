@@ -62,3 +62,7 @@ La invitación de boda puede permanecer en su repositorio y publicación indepen
 - [Limitaciones de Render gratuito](https://render.com/docs/free).
 - [Conectar con Neon](https://neon.com/docs/connect/connect-intro).
 - [API de correo transaccional de Brevo](https://developers.brevo.com/docs/send-a-transactional-email).
+
+## Traducción de nombres de páginas
+
+Configura `TITLE_TRANSLATION_PROVIDER=mymemory` para habilitar el servicio de traducción de nombres entre español e inglés. La interfaz explica que solo el nombre se envía al proveedor; el contenido de los documentos permanece en Nodo. No requiere una clave API, tiene cuotas y conserva los nombres originales cuando el proveedor no responde. Consulta [la versión 1.0.0.1](release-1.0.0.1.md).

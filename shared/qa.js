@@ -1,3 +1,5 @@
+import { bugReport } from './bugs.js';
+
 export const qaStatuses = [
   'PENDIENTE',
   'EN VALIDACIÓN',
@@ -5,6 +7,7 @@ export const qaStatuses = [
   'CORREGIDO',
   'CERRADO',
   'BUG',
+  'FAIL',
   'BUG RELACIONADO',
   'CANCELADO',
   'NO APLICA',
@@ -15,7 +18,7 @@ export const qaStatuses = [
 ];
 
 export function caseNameFromReference(reference = '') {
-  return reference.trim().match(/^ATC(?:[_-][a-z]+)*[_-]\d+[_-](.+)$/i)?.[1] || '';
+  return reference.trim().match(/^ATC(?:[_-][a-z]+)*[_-]?\d+[_-](.+)$/i)?.[1] || '';
 }
 
 export function referenceNamePatch(row, reference) {
@@ -54,7 +57,7 @@ export function completeReferenceNames(blocks, previous = []) {
 export function qaCategory(status) {
   if (['PASS', 'CORREGIDO'].includes(status)) return 'validated';
   if (['CERRADO', 'CANCELADO', 'NO APLICA'].includes(status)) return 'closed';
-  if (['BUG', 'BUG RELACIONADO'].includes(status)) return 'bug';
+  if (['BUG', 'FAIL', 'BUG RELACIONADO'].includes(status)) return 'bug';
   if (status === 'BLOQUEADO') return 'blocked';
   return 'pending';
 }
@@ -67,15 +70,12 @@ export function qaWorkStatus(status) {
 }
 
 export function summarizeQA(pages) {
-  const blocks = pages.flatMap((page) => page.blocks.filter((block) => block.type === 'qa'));
+  const blocks = pages.flatMap((page) =>
+    page.blocks.filter((block) => block.type === 'qa' || block.type === 'bug-report'),
+  );
   if (!blocks.length) return null;
   const cases = blocks.filter((block) => block.kind === 'cases').flatMap((block) => block.rows);
-  const bugs = new Map();
-  for (const row of blocks
-    .filter((block) => block.kind === 'bugs')
-    .flatMap((block) => block.rows)) {
-    if (row.workItemId && !bugs.has(row.workItemId)) bugs.set(row.workItemId, row);
-  }
+  const bugs = bugReport(pages);
   const count = (category) => cases.filter((row) => qaCategory(row.status) === category).length;
   return {
     total: cases.length,
@@ -86,9 +86,9 @@ export function summarizeQA(pages) {
     affected: count('bug'),
     blocked: count('blocked'),
     missingReference: cases.filter((row) => !row.reference.trim()).length,
-    bugs: bugs.size,
-    openBugs: [...bugs.values()].filter((row) => row.status === 'BUG').length,
-    unconfirmedBugs: [...bugs.values()].filter((row) =>
+    bugs: bugs.length,
+    openBugs: bugs.filter((row) => row.status === 'BUG').length,
+    unconfirmedBugs: bugs.filter((row) =>
       ['POR CONFIRMAR', 'POSIBLE BUG', 'PENDIENTE', 'ACTIVE', 'EN VALIDACIÓN'].includes(row.status),
     ).length,
   };

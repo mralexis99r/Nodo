@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Check, Copy, FilePlus2, Plus, Settings, Star, Trash2 } from 'lucide-react';
 import { api } from './api';
 import { statusKeys } from './i18n';
@@ -20,6 +20,8 @@ import {
 import Editor from './editor/Editor';
 import { summarizeQA, workUnits } from '../shared/qa';
 import { QASummary } from './editor/QATracker';
+import ImportProject from './ImportProject';
+import { pageTitle } from '../shared/page-title';
 
 export function summarizePages(pages) {
   const tasks = workUnits(pages);
@@ -63,6 +65,31 @@ export default function Project({
   const [modal, setModal] = useState(null);
   const [editorEpoch, setEditorEpoch] = useState(0);
   const project = state.data;
+  const [translationError, setTranslationError] = useState(false);
+  const titleSignature = project?.pages.map((page) => `${page.id}:${page.title}`).join('|');
+  useEffect(() => {
+    if (!project) return;
+    let active = true;
+    setTranslationError(false);
+    api(`/projects/${projectId}/translate-titles`, { method: 'POST', body: { language: locale } })
+      .then((result) => {
+        if (!active) return;
+        setTranslationError(result.failures.length > 0);
+        setData((current) => ({
+          ...current,
+          pages: current.pages.map((page) => {
+            const translated = result.pages.find(
+              (item) => item.id === page.id && item.title === page.title,
+            );
+            return translated ? { ...page, titleTranslations: translated.titleTranslations } : page;
+          }),
+        }));
+      })
+      .catch(() => active && setTranslationError(true));
+    return () => {
+      active = false;
+    };
+  }, [projectId, locale, titleSignature]);
   const page =
     project?.pages.find((item) => item.id === pageId) || (!pageId ? project?.pages[0] : null);
   const summary = useMemo(() => (project ? summarizePages(project.pages) : null), [project]);
@@ -155,6 +182,22 @@ export default function Project({
         </div>
       </div>
       {summary.qa && <QASummary summary={summary.qa} t={t} />}
+      {translationError && (
+        <p role="status" className="qa-warning">
+          {t('translationUnavailable')}
+        </p>
+      )}
+      <button
+        className="button secondary import-cases-button"
+        onClick={() =>
+          run(async () => {
+            if (saveGuard.current) await saveGuard.current();
+            setModal({ type: 'import' });
+          })
+        }
+      >
+        {t('importCases')}
+      </button>
       <div className="project-tabs">
         <div className="project-tab-list" role="tablist" aria-label={t('features')}>
           {project.pages.map((item) => (
@@ -168,7 +211,7 @@ export default function Project({
               onClick={() => navigate(`project/${projectId}/${item.id}`)}
             >
               <Icon name={item.icon} size={16} />
-              <span>{item.title}</span>
+              <span>{pageTitle(item, locale)}</span>
             </button>
           ))}
         </div>
@@ -186,13 +229,44 @@ export default function Project({
             t={t}
             locale={locale}
             summary={summary}
+            onNavigate={(target) => run(() => navigate(`project/${projectId}/${target}`))}
+            onUpdateBug={async (bug, input) => {
+              if (saveGuard.current) await saveGuard.current();
+              const result = await api(`/projects/${projectId}/bugs`, {
+                method: 'PUT',
+                body: { key: bug.key, revision: bug.revision, ...input },
+              });
+              saveGuard.current = null;
+              setData(result);
+              setEditorEpoch((value) => value + 1);
+              invalidate();
+            }}
             color={project.color}
             saveGuard={saveGuard}
-            onSaved={(saved) => {
+            onSaved={async (saved) => {
               setData((current) => ({
                 ...current,
                 pages: current.pages.map((item) => (item.id === saved.id ? saved : item)),
               }));
+              if (
+                saved.blocks.some(
+                  (block) =>
+                    block.type === 'bug-report' || (block.type === 'qa' && block.kind === 'bugs'),
+                )
+              ) {
+                try {
+                  const fresh = await api(`/projects/${projectId}`);
+                  setData((current) => ({
+                    ...current,
+                    pages: current.pages.map((page) => {
+                      const latest = fresh.pages.find((item) => item.id === page.id);
+                      return latest && latest.version >= page.version ? latest : page;
+                    }),
+                  }));
+                } catch {
+                  /* Keep the saved page when refreshing other connections fails. */
+                }
+              }
             }}
             onReload={() =>
               run(async () => {
@@ -215,9 +289,22 @@ export default function Project({
           </button>
         </Empty>
       )}
+      {modal?.type === 'import' && (
+        <ImportProject
+          t={t}
+          projectId={projectId}
+          onClose={() => setModal(null)}
+          onImported={async (id) => {
+            setModal(null);
+            invalidate();
+            await navigate(`project/${projectId}/${id}`);
+          }}
+        />
+      )}
       {modal?.type === 'page' && (
         <PageForm
           t={t}
+          locale={locale}
           onClose={() => setModal(null)}
           onSubmit={async (input) => {
             const result = await api(`/projects/${projectId}/pages`, {
@@ -252,7 +339,7 @@ export default function Project({
   );
 }
 
-function PageForm({ t, onClose, onSubmit }) {
+function PageForm({ t, locale, onClose, onSubmit }) {
   const [title, setTitle] = useState('');
   const [icon, setIcon] = useState('file');
   const [busy, setBusy] = useState(false),
@@ -264,7 +351,7 @@ function PageForm({ t, onClose, onSubmit }) {
           event.preventDefault();
           setBusy(true);
           try {
-            await onSubmit({ title, icon, status: 'todo', blocks: [] });
+            await onSubmit({ title, titleLanguage: locale, icon, status: 'todo', blocks: [] });
           } catch (err) {
             setError(err.message);
           } finally {
@@ -272,7 +359,9 @@ function PageForm({ t, onClose, onSubmit }) {
           }
         }}
       >
-        <p className="modal-description">{t('pageSubtitle')}</p>
+        <p className="modal-description">
+          {t('pageSubtitle')} {t('titleTranslationHelp')}
+        </p>
         <ErrorMessage error={error} t={t} />
         <label>
           {t('pageName')}

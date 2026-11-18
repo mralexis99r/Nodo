@@ -1,3 +1,4 @@
+import { bugReport } from './bugs.js';
 import { qaStatuses } from './qa.js';
 
 export const qaClassifications = [
@@ -105,14 +106,7 @@ export function groupRecords(pages, dataset, field) {
       )
       .flatMap((block) => block.rows),
   );
-  if (dataset === 'bugs') {
-    const seen = new Set();
-    records = records.filter((row) => {
-      if (!row.workItemId || seen.has(row.workItemId)) return false;
-      seen.add(row.workItemId);
-      return true;
-    });
-  }
+  if (dataset === 'bugs') records = bugReport(pages);
   const groups = new Map();
   for (const row of records) {
     const value = row[field] || (dataset === 'tasks' && field === 'itemType' ? 'task' : '');

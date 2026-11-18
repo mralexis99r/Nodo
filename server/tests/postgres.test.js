@@ -7,6 +7,7 @@ import { createTestApp, registerVerified, headers } from './helpers.js';
 import { openDatabase } from '../db.js';
 import { importSQLite } from '../import-sqlite.js';
 import { qaPackage } from './qa-fixture.js';
+import { bugReport } from '../../shared/bugs.js';
 
 // Run the same tests against real PostgreSQL in CI and embedded PostgreSQL locally.
 async function embeddedPool() {
@@ -257,4 +258,43 @@ test('SQLite import preserves content and refuses overwrites without copying ses
     source.close();
     await target.close();
   }
+});
+
+test('PostgreSQL synchronizes bug connections atomically while preserving case outcomes', async () => {
+  const imported = (await post(owner, '/api/projects/import', qaPackage()).expect(201)).body;
+  const project = (await owner.get(`/api/projects/${imported.id}`).expect(200)).body;
+  const bug = bugReport(project.pages).find((item) => item.workItemId === '42');
+  const before = project.pages[0].blocks[0].rows.map((row) => row.status);
+  const response = await owner
+    .put(`/api/projects/${imported.id}/bugs`)
+    .set(headers)
+    .send({
+      key: bug.key,
+      revision: bug.revision,
+      title: 'Validated defect',
+      status: 'CERRADO',
+      note: 'Retested',
+      history: 'QA signoff',
+    })
+    .expect(200);
+  assert.equal(
+    bugReport(response.body.pages).find((item) => item.workItemId === '42').status,
+    'CERRADO',
+  );
+  assert.deepEqual(
+    response.body.pages[0].blocks[0].rows.map((row) => row.status),
+    before,
+  );
+  await owner
+    .put(`/api/projects/${imported.id}/bugs`)
+    .set(headers)
+    .send({
+      key: bug.key,
+      revision: bug.revision,
+      title: 'Stale edit',
+      status: 'BUG',
+      note: '',
+      history: '',
+    })
+    .expect(409);
 });

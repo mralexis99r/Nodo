@@ -10,7 +10,7 @@ export async function initializePostgres(db) {
     const current = await db
       .prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations')
       .get();
-    if (current.version > 1) throw new Error('UNSUPPORTED_DATABASE_VERSION');
+    if (current.version > 2) throw new Error('UNSUPPORTED_DATABASE_VERSION');
     if (current.version < 1) {
       const statements = [
         `CREATE TABLE users (
@@ -43,6 +43,17 @@ export async function initializePostgres(db) {
       for (const sql of statements) await db.prepare(sql).run();
       await db
         .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)')
+        .run(new Date().toISOString());
+    }
+    if (current.version < 2) {
+      await db
+        .prepare("ALTER TABLE pages ADD COLUMN title_language TEXT NOT NULL DEFAULT 'es'")
+        .run();
+      await db
+        .prepare("ALTER TABLE pages ADD COLUMN title_translations TEXT NOT NULL DEFAULT '{}'")
+        .run();
+      await db
+        .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)')
         .run(new Date().toISOString());
     }
   });

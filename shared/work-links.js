@@ -23,7 +23,9 @@ export function normalizeWorkItem(row) {
 
 export function normalizeWorkItemBlocks(blocks) {
   return blocks.map((block) =>
-    block.type === 'qa' ? { ...block, rows: block.rows.map(normalizeWorkItem) } : block,
+    ['qa', 'bug-report'].includes(block.type)
+      ? { ...block, rows: block.rows.map(normalizeWorkItem) }
+      : block,
   );
 }
 

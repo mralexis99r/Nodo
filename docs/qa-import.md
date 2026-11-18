@@ -42,3 +42,7 @@ Los bloques de texto siguen disponibles para apuntes y análisis. **HUs y trabaj
 **Gráfica o reporte** permite elegir entre trabajo, casos QA y bugs por ID único, con alcance de página o proyecto. El usuario selecciona la agrupación y la vista de barras o tabla. Los conteos se calculan sobre los registros actuales; no se copian métricas del archivo original. Los porcentajes expresan la proporción de registros de cada categoría. Las referencias históricas no se cuentan como casos.
 
 Los bloques de QA y sus filas se duplican con nuevos identificadores. La papelera permite recuperar páginas y proyectos. Eliminar una fila desde su tabla requiere confirmación y no tiene recuperación individual en esta versión.
+
+## Matrices funcionales y Bug Report
+
+Desde la versión 1.0.0.1 puedes importar la matriz `.xlsx` directamente dentro de un proyecto y conservar los pasos con sus resultados esperados. El nuevo bloque **Reporte de bugs** consolida los registros y sus casos vinculados; el estado del bug y el resultado de cada caso siguen siendo independientes. Consulta [el formato soportado y la nomenclatura](release-1.0.0.1.md).
